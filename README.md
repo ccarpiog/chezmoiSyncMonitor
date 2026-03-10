@@ -35,6 +35,16 @@ Chezmoi Sync Monitor keeps this visible from the menu bar and gives you safe act
 - `chezmoi` installed and initialized
 - `git` installed
 
+## About chezmoi
+
+Chezmoi Sync Monitor works with [chezmoi](https://www.chezmoi.io/), a dotfile manager.
+
+If you are new to chezmoi:
+
+- Install chezmoi: <https://www.chezmoi.io/install/>
+- Quick start guide: <https://www.chezmoi.io/quick-start/>
+- Common commands: <https://www.chezmoi.io/user-guide/frequently-used-commands/>
+
 ## Install
 
 Use the notarized `.dmg` from GitHub Releases:
