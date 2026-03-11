@@ -40,6 +40,51 @@ for cmd in xcodebuild xcrun hdiutil ditto; do
   fi
 done
 
+IDENTITIES_OUTPUT="$(security find-identity -v -p codesigning 2>&1 || true)"
+MATCHING_IDENTITY="$(
+  echo "$IDENTITIES_OUTPUT" | awk \
+    -v cert="$DEVELOPER_ID_APP_CERT" \
+    -v team="($TEAM_ID)" \
+    'index($0, cert) && index($0, team) { print; exit }'
+)"
+
+if [[ -z "$MATCHING_IDENTITY" ]]; then
+  echo "Missing signing identity: '$DEVELOPER_ID_APP_CERT' for team '$TEAM_ID'." >&2
+  echo >&2
+  echo "Expected to find a certificate like:" >&2
+  echo "  $DEVELOPER_ID_APP_CERT: <Your Name> ($TEAM_ID)" >&2
+  echo >&2
+  echo "Current codesigning identities:" >&2
+  echo "$IDENTITIES_OUTPUT" >&2
+  echo >&2
+  echo "Fix:" >&2
+  echo "  1) Install a Developer ID Application certificate (with private key) in your login keychain." >&2
+  echo "  2) Verify with: security find-identity -v -p codesigning" >&2
+  exit 1
+fi
+
+set +e
+NOTARY_CHECK_OUTPUT="$(xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" 2>&1 >/dev/null)"
+NOTARY_CHECK_STATUS=$?
+set -e
+
+if [[ $NOTARY_CHECK_STATUS -ne 0 ]]; then
+  echo "Notary profile '$NOTARY_PROFILE' is not usable." >&2
+  echo >&2
+  echo "notarytool returned:" >&2
+  echo "$NOTARY_CHECK_OUTPUT" >&2
+  echo >&2
+  echo "Fix:" >&2
+  echo "  xcrun notarytool store-credentials \"$NOTARY_PROFILE\" \\" >&2
+  echo "    --apple-id \"<APPLE_ID>\" \\" >&2
+  echo "    --team-id \"$TEAM_ID\" \\" >&2
+  echo "    --password \"<APP_SPECIFIC_PASSWORD>\"" >&2
+  echo >&2
+  echo "Then verify with:" >&2
+  echo "  xcrun notarytool history --keychain-profile \"$NOTARY_PROFILE\"" >&2
+  exit 1
+fi
+
 mkdir -p "$BUILD_DIR" "$EXPORT_DIR" "$ARTIFACTS_DIR"
 rm -rf "$ARCHIVE_PATH" "$EXPORT_DIR" "$ZIP_PATH" "$DMG_PATH"
 

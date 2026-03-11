@@ -163,6 +163,40 @@ final class ServiceTests: XCTestCase {
         XCTAssertTrue(results[0].availableActions.contains(.viewDiff))
     } // End of func testParseStatusActionsIncludeEditor()
 
+    // MARK: - Chezmoi path normalization tests
+
+    /// Relative paths are converted to ~/path for chezmoi CLI commands.
+    func testResolveChezmoiTargetPathRelative() {
+        XCTAssertEqual(
+            ChezmoiService.resolveChezmoiTargetPath(".config/nvim/init.lua"),
+            "~/.config/nvim/init.lua"
+        )
+    }
+
+    /// Paths already using ~/ are preserved as-is.
+    func testResolveChezmoiTargetPathHomeRelative() {
+        XCTAssertEqual(
+            ChezmoiService.resolveChezmoiTargetPath("~/.zshrc"),
+            "~/.zshrc"
+        )
+    }
+
+    /// Absolute paths are preserved as-is.
+    func testResolveChezmoiTargetPathAbsolute() {
+        XCTAssertEqual(
+            ChezmoiService.resolveChezmoiTargetPath("/Users/test/.zshrc"),
+            "/Users/test/.zshrc"
+        )
+    }
+
+    /// Leading ./ is removed and normalized to ~/path.
+    func testResolveChezmoiTargetPathDotSlash() {
+        XCTAssertEqual(
+            ChezmoiService.resolveChezmoiTargetPath("./.config/karabiner/karabiner.json"),
+            "~/.config/karabiner/karabiner.json"
+        )
+    }
+
     // MARK: - GitService Ahead/Behind Parser Tests
 
     /// Verifies parsing of standard ahead/behind output.
@@ -211,5 +245,33 @@ final class ServiceTests: XCTestCase {
                 XCTFail("Expected parseFailure, got \(error)")
             }
         }
+    }
+
+    /// Verifies detached HEAD stderr is treated as missing upstream.
+    func testIsMissingUpstreamErrorDetachedHead() {
+        XCTAssertTrue(
+            GitService.isMissingUpstreamError("fatal: HEAD does not point to a branch")
+        )
+    }
+
+    /// Verifies no-upstream stderr is treated as missing upstream.
+    func testIsMissingUpstreamErrorNoUpstreamConfigured() {
+        XCTAssertTrue(
+            GitService.isMissingUpstreamError("fatal: no upstream configured for branch 'main'")
+        )
+    }
+
+    /// Verifies unrelated stderr is not treated as missing upstream.
+    func testIsMissingUpstreamErrorFalseForOtherFailures() {
+        XCTAssertFalse(
+            GitService.isMissingUpstreamError("fatal: bad revision 'HEAD~999'")
+        )
+    }
+
+    /// Verifies fetch-without-remote stderr is treated as non-fatal.
+    func testIsNoRemoteConfiguredError() {
+        XCTAssertTrue(
+            GitService.isNoRemoteConfiguredError("fatal: No remote repository specified.")
+        )
     }
 } // End of class ServiceTests

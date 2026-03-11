@@ -109,9 +109,7 @@ final class ChezmoiService: ChezmoiServiceProtocol, Sendable {
     /// - Returns: The unified diff string.
     /// - Throws: `AppError` if the chezmoi command fails.
     func diff(for path: String) async throws -> String {
-        // chezmoi status outputs paths relative to home (e.g. "Library/Preferences/foo"),
-        // but chezmoi diff requires ~/path format to resolve correctly.
-        let resolvedPath = path.hasPrefix("/") ? path : "~/\(path)"
+        let resolvedPath = Self.resolveChezmoiTargetPath(path)
         let result = try await ProcessRunner.run(
             command: chezmoiBinary,
             arguments: ["diff", "--", resolvedPath]
@@ -125,7 +123,7 @@ final class ChezmoiService: ChezmoiServiceProtocol, Sendable {
     /// - Returns: The `CommandResult` of the add command.
     /// - Throws: `AppError` if the chezmoi command fails.
     func add(path: String) async throws -> CommandResult {
-        let resolvedPath = path.hasPrefix("/") ? path : "~/\(path)"
+        let resolvedPath = Self.resolveChezmoiTargetPath(path)
         return try await ProcessRunner.run(
             command: chezmoiBinary,
             arguments: ["add", resolvedPath]
@@ -145,17 +143,92 @@ final class ChezmoiService: ChezmoiServiceProtocol, Sendable {
 
     /// Pulls remote changes into the chezmoi source state without applying them.
     ///
-    /// Uses `chezmoi update --apply=false` to sync the source repo from remote
-    /// without modifying any local target files.
+    /// Uses a fast-forward-only git pull in the chezmoi source repo to avoid
+    /// rebase-based detached-HEAD states if the process is interrupted.
     ///
     /// - Returns: The `CommandResult` of the pull command.
     /// - Throws: `AppError` if the chezmoi command fails.
     func pullSource() async throws -> CommandResult {
+        try await ensureAttachedHeadForSourceRepo()
+
+        // Use a longer timeout than the ProcessRunner default because network/auth
+        // round-trips can exceed 30s on some machines.
+        let result = try await runSourceGit(
+            arguments: ["pull", "--no-rebase", "--ff-only", "--autostash"],
+            timeout: 120,
+            throwOnFailure: false
+        )
+
+        if result.exitCode != 0 {
+            throw AppError.cliFailure(
+                command: result.command,
+                exitCode: result.exitCode,
+                stderr: result.stderr
+            )
+        }
+
+        return result
+    } // End of func pullSource()
+
+    /// Ensures the chezmoi source repo is on an attached local branch.
+    ///
+    /// If HEAD is detached, attempts to re-attach to the default remote branch
+    /// (`origin/HEAD`) by switching to the matching local branch or creating it.
+    /// - Throws: `AppError` if the repo cannot be re-attached safely.
+    private func ensureAttachedHeadForSourceRepo() async throws {
+        let headResult = try await runSourceGit(arguments: ["rev-parse", "--abbrev-ref", "HEAD"])
+        let headRef = headResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard headRef == "HEAD" else { return }
+
+        let remoteHeadResult = try await runSourceGit(
+            arguments: ["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"],
+            throwOnFailure: false
+        )
+        let remoteHeadRef = remoteHeadResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard remoteHeadResult.exitCode == 0, remoteHeadRef.hasPrefix("origin/") else {
+            throw AppError.unknown(
+                "Detached HEAD in chezmoi source repo and origin/HEAD is unavailable. " +
+                "Run: chezmoi git -- switch <branch> and set upstream before applying remote changes."
+            )
+        }
+
+        let localBranch = String(remoteHeadRef.dropFirst("origin/".count))
+        let switchExisting = try await runSourceGit(
+            arguments: ["switch", localBranch],
+            throwOnFailure: false
+        )
+        if switchExisting.exitCode == 0 { return }
+
+        let switchCreateTracked = try await runSourceGit(
+            arguments: ["switch", "-c", localBranch, "--track", remoteHeadRef],
+            throwOnFailure: false
+        )
+        if switchCreateTracked.exitCode == 0 { return }
+
+        throw AppError.unknown(
+            """
+            Detached HEAD in chezmoi source repo and auto-repair failed.
+            Try:
+              chezmoi git -- switch \(localBranch)
+              chezmoi git -- branch --set-upstream-to=\(remoteHeadRef) \(localBranch)
+            """
+        )
+    } // End of func ensureAttachedHeadForSourceRepo()
+
+    /// Runs a git command inside the chezmoi source repo via `chezmoi git --`.
+    private func runSourceGit(
+        arguments: [String],
+        timeout: TimeInterval = 30,
+        throwOnFailure: Bool = true
+    ) async throws -> CommandResult {
         return try await ProcessRunner.run(
             command: chezmoiBinary,
-            arguments: ["update", "--no-tty", "--apply=false"]
+            arguments: ["git", "--"] + arguments,
+            timeout: timeout,
+            throwOnFailure: throwOnFailure
         )
-    } // End of func pullSource()
+    } // End of func runSourceGit(arguments:timeout:throwOnFailure:)
 
     /// Applies the chezmoi source state for a single file to the local machine.
     ///
@@ -165,7 +238,7 @@ final class ChezmoiService: ChezmoiServiceProtocol, Sendable {
     /// - Returns: The `CommandResult` of the apply command.
     /// - Throws: `AppError` if the chezmoi command fails.
     func apply(path: String) async throws -> CommandResult {
-        let resolvedPath = path.hasPrefix("/") ? path : "~/\(path)"
+        let resolvedPath = Self.resolveChezmoiTargetPath(path)
         return try await ProcessRunner.run(
             command: chezmoiBinary,
             arguments: ["apply", "--no-tty", "--", resolvedPath]
@@ -218,7 +291,7 @@ final class ChezmoiService: ChezmoiServiceProtocol, Sendable {
     /// - Returns: The absolute path to the corresponding file in the chezmoi source directory.
     /// - Throws: `AppError` if the chezmoi command fails.
     func sourcePath(for path: String) async throws -> String {
-        let resolvedPath = path.hasPrefix("/") ? path : "~/\(path)"
+        let resolvedPath = Self.resolveChezmoiTargetPath(path)
         let result = try await ProcessRunner.run(
             command: chezmoiBinary,
             arguments: ["source-path", resolvedPath]
@@ -229,4 +302,24 @@ final class ChezmoiService: ChezmoiServiceProtocol, Sendable {
         }
         return output
     } // End of func sourcePath(for:)
+
+    /// Normalizes a UI/status path into the format expected by chezmoi CLI path args.
+    ///
+    /// Accepted inputs:
+    /// - Relative: `.zshrc` -> `~/.zshrc`
+    /// - Dot-slash: `./.zshrc` -> `~/.zshrc`
+    /// - Home-relative: `~/.zshrc` -> unchanged
+    /// - Absolute: `/Users/me/.zshrc` -> unchanged
+    ///
+    /// Exposed internally for unit testing.
+    static func resolveChezmoiTargetPath(_ path: String) -> String {
+        let trimmedPath = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedPath.hasPrefix("/") || trimmedPath.hasPrefix("~") {
+            return trimmedPath
+        }
+        if trimmedPath.hasPrefix("./") {
+            return "~/" + String(trimmedPath.dropFirst(2))
+        }
+        return "~/" + trimmedPath
+    } // End of static func resolveChezmoiTargetPath(_:)
 } // End of class ChezmoiService

@@ -28,7 +28,7 @@ protocol ChezmoiServiceProtocol: Sendable {
     func update() async throws -> CommandResult
 
     /// Pulls remote changes into the chezmoi source state without applying them.
-    /// Equivalent to `chezmoi update --apply=false`.
+    /// Uses a fast-forward-only pull in the source repo.
     /// - Returns: The result of the pull command.
     /// - Throws: `AppError` if the chezmoi command fails.
     func pullSource() async throws -> CommandResult
