@@ -249,6 +249,19 @@ final class AppStateStore {
 
         try Task.checkCancellation()
 
+        // Step 3b: Get chezmoi tracked files (degrade gracefully on failure)
+        var trackedFiles: Set<String> = []
+        do {
+            trackedFiles = try await chezmoiService.trackedFiles()
+        } catch {
+            appendEvent(ActivityEvent(
+                eventType: .refresh,
+                message: "Could not fetch tracked files, falling back to drift-only mode"
+            ))
+        }
+
+        try Task.checkCancellation()
+
         // Step 4: Get git ahead/behind
         let (_, behind) = try await gitService.aheadBehind()
 
@@ -288,11 +301,12 @@ final class AppStateStore {
             remoteChanged = remoteChanged.union(pendingRemoteFiles)
         }
 
-        // Step 6: Classify files
+        // Step 6: Classify files (includes clean tracked files when available)
         let classifiedFiles = fileStateEngine.classify(
             localFiles: localFiles,
             remoteBehind: behind,
-            remoteChangedFiles: remoteChanged
+            remoteChangedFiles: remoteChanged,
+            trackedFiles: trackedFiles
         )
 
         // Step 7: Build snapshot
@@ -494,6 +508,93 @@ final class AppStateStore {
         await forceRefresh()
     } // End of func updateSafe()
 
+    /// Reverts local changes for a single file to match the chezmoi source state.
+    ///
+    /// Revalidates that the file is still in `localDrift` state before executing.
+    /// Pulls the source repo first (to ensure the latest remote state), then applies
+    /// the file so the local copy matches the source.
+    /// - Parameter path: The relative file path to revert.
+    func revertLocal(path: String) async {
+        // Revalidate: ensure the file is still in localDrift state
+        guard let currentFile = snapshot.files.first(where: { $0.path == path }),
+              currentFile.state == .localDrift else {
+            let reason = snapshot.files.first(where: { $0.path == path })?.state.displayName ?? "not found in snapshot"
+            appendEvent(ActivityEvent(
+                eventType: .error,
+                message: "Revert aborted for \(path): file state is \(reason) since confirmation",
+                relatedFilePath: path
+            ))
+            await forceRefresh()
+            return
+        }
+
+        appendEvent(ActivityEvent(
+            eventType: .update,
+            message: "Reverting local changes for \(path)",
+            relatedFilePath: path
+        ))
+
+        do {
+            _ = try await chezmoiService.pullSource()
+        } catch {
+            appendEvent(ActivityEvent(
+                eventType: .error,
+                message: "Failed to pull source before reverting \(path): \(error.localizedDescription)",
+                relatedFilePath: path
+            ))
+            await forceRefresh()
+            return
+        }
+
+        do {
+            _ = try await chezmoiService.apply(path: path)
+            appendEvent(ActivityEvent(
+                eventType: .update,
+                message: "Reverted local changes for \(path)",
+                relatedFilePath: path
+            ))
+        } catch {
+            appendEvent(ActivityEvent(
+                eventType: .error,
+                message: "Revert failed for \(path): \(error.localizedDescription)",
+                relatedFilePath: path
+            ))
+        }
+
+        await forceRefresh()
+    } // End of func revertLocal(path:)
+
+    /// Removes a single file from chezmoi tracking.
+    ///
+    /// Uses `chezmoi forget --force` to untrack the file without deleting the
+    /// local copy. No state revalidation is performed — the UI confirmation
+    /// flow serves as the safety gate.
+    /// - Parameter path: The relative file path to forget.
+    func forgetSingle(path: String) async {
+        appendEvent(ActivityEvent(
+            eventType: .update,
+            message: "Forgetting \(path) from chezmoi tracking",
+            relatedFilePath: path
+        ))
+
+        do {
+            _ = try await chezmoiService.forget(path: path)
+            appendEvent(ActivityEvent(
+                eventType: .update,
+                message: "Removed \(path) from chezmoi tracking",
+                relatedFilePath: path
+            ))
+        } catch {
+            appendEvent(ActivityEvent(
+                eventType: .error,
+                message: "Forget failed for \(path): \(error.localizedDescription)",
+                relatedFilePath: path
+            ))
+        }
+
+        await forceRefresh()
+    } // End of func forgetSingle(path:)
+
     /// Commits and pushes all changes in the chezmoi source repo to the remote.
     ///
     /// Uses `chezmoi git` under the hood. Logs success or failure as activity events.
@@ -524,19 +625,60 @@ final class AppStateStore {
     /// editors like vim or long-running GUI editors are not killed by a timeout.
     /// - Parameter path: The relative file path to open.
     func openInEditor(path: String) {
-        let homePath = NSHomeDirectory()
-        let absolutePath = path.hasPrefix("/") ? path : "\(homePath)/\(path)"
+        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        let expandedPath = (trimmed as NSString).expandingTildeInPath
+        let absolutePath: String
+        if expandedPath.hasPrefix("/") {
+            absolutePath = expandedPath
+        } else {
+            absolutePath = (NSHomeDirectory() as NSString).appendingPathComponent(expandedPath)
+        }
 
         do {
-            if let editor = preferences.preferredEditor, !editor.isEmpty {
-                let editorPath = PATHResolver.findExecutable(editor) ?? editor
-                try launchProcess(command: editorPath, arguments: [absolutePath])
-            } else {
-                try launchProcess(command: "/usr/bin/open", arguments: [absolutePath])
+            guard FileManager.default.fileExists(atPath: absolutePath) else {
+                throw AppError.unknown("File not found at \(absolutePath)")
             }
+
+            let command: String
+            let arguments: [String]
+            let waitForExit: Bool
+
+            if let editor = preferences.preferredEditor?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !editor.isEmpty {
+                // Support app bundle paths selected from Browse... in Preferences.
+                if editor.hasSuffix(".app") {
+                    command = "/usr/bin/open"
+                    arguments = ["-a", editor, absolutePath]
+                    waitForExit = true
+                } else {
+                    let editorPath = PATHResolver.findExecutable(editor) ?? editor
+                    if isTerminalEditorCommand(editorPath) {
+                        let terminalCommand = commandDescription(command: editorPath, arguments: [absolutePath])
+                        try launchInTerminal(shellCommand: terminalCommand)
+                        appendEvent(ActivityEvent(
+                            eventType: .refresh,
+                            message: "Opened \(path) in terminal editor via Terminal: \(terminalCommand)",
+                            relatedFilePath: path
+                        ))
+                        return
+                    } else {
+                        command = editorPath
+                        arguments = [absolutePath]
+                        waitForExit = false
+                    }
+                }
+            } else {
+                // Use text-editor mode to avoid app-association failures for file types like .plist.
+                command = "/usr/bin/open"
+                arguments = ["-t", absolutePath]
+                waitForExit = true
+            }
+
+            let commandLine = commandDescription(command: command, arguments: arguments)
+            try launchProcess(command: command, arguments: arguments, waitForExit: waitForExit)
             appendEvent(ActivityEvent(
                 eventType: .refresh,
-                message: "Opened \(path) in editor",
+                message: "Opened \(path) in editor via \(commandLine)",
                 relatedFilePath: path
             ))
         } catch {
@@ -605,13 +747,82 @@ final class AppStateStore {
     /// - Parameters:
     ///   - command: The path to the executable.
     ///   - arguments: The arguments to pass.
+    ///   - waitForExit: Whether to wait for process completion and validate exit status.
     /// - Throws: If the process cannot be launched.
-    private func launchProcess(command: String, arguments: [String]) throws {
+    private func launchProcess(command: String, arguments: [String], waitForExit: Bool = false) throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: command)
         process.arguments = arguments
-        try process.run()
+        let stderrPipe = Pipe()
+        if waitForExit {
+            process.standardError = stderrPipe
+        }
+        let commandLine = commandDescription(command: command, arguments: arguments)
+
+        do {
+            try process.run()
+        } catch {
+            throw AppError.unknown("Failed to launch command '\(commandLine)': \(error.localizedDescription)")
+        }
+
+        if waitForExit {
+            process.waitUntilExit()
+            if process.terminationStatus != 0 {
+                let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+                let stderr = String(data: stderrData, encoding: .utf8)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                throw AppError.cliFailure(
+                    command: commandLine,
+                    exitCode: process.terminationStatus,
+                    stderr: stderr
+                )
+            }
+        }
     } // End of func launchProcess(command:arguments:)
+
+    /// Returns true if the editor command is terminal-bound and needs a terminal host.
+    /// - Parameter command: Executable path or command name.
+    /// - Returns: `true` for terminal editors (nano/vim/etc).
+    private func isTerminalEditorCommand(_ command: String) -> Bool {
+        let base = URL(fileURLWithPath: command).lastPathComponent.lowercased()
+        return ["nano", "vim", "vi", "nvim", "emacs", "ed", "less", "more"].contains(base)
+    } // End of func isTerminalEditorCommand(_:)
+
+    /// Launches a shell command in Terminal.app.
+    /// - Parameter shellCommand: The command line to run in a new Terminal tab.
+    /// - Throws: If `osascript` fails.
+    private func launchInTerminal(shellCommand: String) throws {
+        let escaped = shellCommand
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+
+        try launchProcess(
+            command: "/usr/bin/osascript",
+            arguments: [
+                "-e", "tell application \"Terminal\" to activate",
+                "-e", "tell application \"Terminal\" to do script \"\(escaped)\""
+            ],
+            waitForExit: true
+        )
+    } // End of func launchInTerminal(shellCommand:)
+
+    /// Renders a shell-like command string for logs and diagnostics.
+    /// - Parameters:
+    ///   - command: The executable path/name.
+    ///   - arguments: Command arguments.
+    /// - Returns: A display-safe command line.
+    private func commandDescription(command: String, arguments: [String]) -> String {
+        func quoteIfNeeded(_ s: String) -> String {
+            if s.isEmpty { return "\"\"" }
+            let safe = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._/:")
+            if s.rangeOfCharacter(from: safe.inverted) == nil {
+                return s
+            }
+            return "\"" + s.replacingOccurrences(of: "\"", with: "\\\"") + "\""
+        }
+
+        return ([command] + arguments).map(quoteIfNeeded).joined(separator: " ")
+    } // End of func commandDescription(command:arguments:)
 
     /// Loads the diff text for a specific file path into `currentDiff`.
     /// - Parameter path: The relative file path to diff.
@@ -764,12 +975,17 @@ final class AppStateStore {
     /// - Parameter files: The classified file statuses.
     /// - Returns: A summary string.
     private func buildRefreshSummary(from files: [FileStatus]) -> String {
+        let clean = files.filter { $0.state == .clean }.count
         let local = files.filter { $0.state == .localDrift }.count
         let remote = files.filter { $0.state == .remoteDrift }.count
         let dual = files.filter { $0.state == .dualDrift }.count
         let errors = files.filter { $0.state == .error }.count
 
-        if files.isEmpty {
+        let driftFiles = local + remote + dual + errors
+        if driftFiles == 0 {
+            if clean > 0 {
+                return "Refresh complete: all \(clean) tracked file(s) in sync"
+            }
             return "Refresh complete: all files in sync"
         }
 
@@ -778,6 +994,7 @@ final class AppStateStore {
         if remote > 0 { parts.append("\(remote) remote") }
         if dual > 0 { parts.append("\(dual) conflict(s)") }
         if errors > 0 { parts.append("\(errors) error(s)") }
+        if clean > 0 { parts.append("\(clean) clean") }
 
         return "Refresh complete: \(parts.joined(separator: ", "))"
     } // End of func buildRefreshSummary(from:)

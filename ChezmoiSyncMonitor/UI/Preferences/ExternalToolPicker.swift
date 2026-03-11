@@ -128,6 +128,9 @@ struct ExternalToolPicker: View {
     /// - Returns: The resolved path, or `nil` if not found.
     private func resolvedPath(for value: String) -> String? {
         if value.hasPrefix("/") {
+            if value.hasSuffix(".app") {
+                return FileManager.default.fileExists(atPath: value) ? value : nil
+            }
             return FileManager.default.isExecutableFile(atPath: value) ? value : nil
         }
         return PATHResolver.findExecutable(value)
@@ -145,11 +148,15 @@ struct ExternalToolPicker: View {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
-        panel.directoryURL = URL(fileURLWithPath: "/usr/local/bin")
-        panel.treatsFilePackagesAsDirectories = true
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        panel.treatsFilePackagesAsDirectories = false
 
         if panel.runModal() == .OK, let url = panel.url {
-            selection = url.path
+            let chosenPath = url.path
+            // Force immediate UI feedback for non-standard/custom editor paths.
+            customText = chosenPath
+            isCustom = true
+            selection = chosenPath
         }
     } // End of func browseForExecutable()
 
