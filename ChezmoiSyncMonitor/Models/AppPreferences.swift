@@ -38,6 +38,10 @@ struct AppPreferences: Codable, Sendable, Equatable {
     /// An optional override for the chezmoi source repository path.
     var sourceRepoPathOverride: String?
 
+    /// Whether verbose diagnostics should be logged in Activity Log at runtime.
+    /// In Debug builds diagnostics are always enabled regardless of this value.
+    var verboseDiagnosticsEnabled: Bool = false
+
     /// Default preferences with sensible initial values.
     static let defaults = AppPreferences(
         schemaVersion: 1,
@@ -50,6 +54,7 @@ struct AppPreferences: Codable, Sendable, Equatable {
         preferredEditor: nil,
         chezmoiPathOverride: nil,
         gitPathOverride: nil,
-        sourceRepoPathOverride: nil
+        sourceRepoPathOverride: nil,
+        verboseDiagnosticsEnabled: false
     )
 } // End of struct AppPreferences

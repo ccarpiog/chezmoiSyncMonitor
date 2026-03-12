@@ -269,6 +269,17 @@ struct PreferencesView: View {
                 loginItemStatusView
             }
 
+            Section(Strings.prefs.diagnostics) {
+                Toggle(Strings.prefs.verboseDiagnostics, isOn: Binding(
+                    get: { prefs.verboseDiagnosticsEnabled },
+                    set: { newValue in
+                        prefs.verboseDiagnosticsEnabled = newValue
+                        savePreferences()
+                    }
+                ))
+                .help(Strings.prefs.verboseDiagnosticsHelp)
+            }
+
             Section(Strings.prefs.reset) {
                 Button(Strings.prefs.resetAllSettings, role: .destructive) {
                     showingResetConfirmation = true

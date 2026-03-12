@@ -103,8 +103,7 @@ final class ServiceTests: XCTestCase {
     // MARK: - ChezmoiService Status Parser Tests
 
     /// Verifies parsing of a typical chezmoi status output with multiple files.
-    /// All files with any change character are classified as localDrift at this stage;
-    /// remote classification happens in FileStateEngine (Phase 4).
+    /// Only entries with a non-space second column (apply-needed drift) are kept.
     func testParseStatusOutputMultipleFiles() {
         let output = """
          M .bashrc
@@ -114,19 +113,14 @@ final class ServiceTests: XCTestCase {
         """
 
         let results = ChezmoiService.parseStatusOutput(output)
-        XCTAssertEqual(results.count, 4)
+        XCTAssertEqual(results.count, 3)
 
         XCTAssertEqual(results[0].path, ".bashrc")
         XCTAssertEqual(results[0].state, .localDrift)
-
-        XCTAssertEqual(results[1].path, ".config/new-tool/config.toml")
+        XCTAssertEqual(results[1].path, ".zshrc")
         XCTAssertEqual(results[1].state, .localDrift)
-
-        XCTAssertEqual(results[2].path, ".zshrc")
+        XCTAssertEqual(results[2].path, ".old-config")
         XCTAssertEqual(results[2].state, .localDrift)
-
-        XCTAssertEqual(results[3].path, ".old-config")
-        XCTAssertEqual(results[3].state, .localDrift)
     } // End of func testParseStatusOutputMultipleFiles()
 
     /// Verifies that empty output produces no FileStatus objects.
@@ -135,13 +129,11 @@ final class ServiceTests: XCTestCase {
         XCTAssertTrue(results.isEmpty)
     }
 
-    /// Verifies that parsing handles single-file output correctly.
+    /// Verifies that first-column-only status entries are ignored.
     func testParseStatusOutputSingleFile() {
-        let output = "RA .renamed-file"
+        let output = "M  .already-added-file"
         let results = ChezmoiService.parseStatusOutput(output)
-        XCTAssertEqual(results.count, 1)
-        XCTAssertEqual(results[0].path, ".renamed-file")
-        XCTAssertEqual(results[0].state, .localDrift)
+        XCTAssertTrue(results.isEmpty)
     }
 
     /// Verifies that available actions are correct for localDrift.
@@ -162,6 +154,15 @@ final class ServiceTests: XCTestCase {
         XCTAssertTrue(results[0].availableActions.contains(.openEditor))
         XCTAssertTrue(results[0].availableActions.contains(.viewDiff))
     } // End of func testParseStatusActionsIncludeEditor()
+
+    /// Verifies that destination-missing entries are marked localMissing.
+    func testParseStatusOutputMarksLocalMissing() {
+        let output = " A .bin/tool"
+        let results = ChezmoiService.parseStatusOutput(output)
+        XCTAssertEqual(results.count, 1)
+        XCTAssertEqual(results[0].path, ".bin/tool")
+        XCTAssertTrue(results[0].localMissing)
+    } // End of func testParseStatusOutputMarksLocalMissing()
 
     // MARK: - Chezmoi path normalization tests
 

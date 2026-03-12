@@ -755,6 +755,18 @@ enum Strings {
             String(localized: "prefs.launchAtLogin",
                    defaultValue: "Launch at login")
         }
+        static var diagnostics: String {
+            String(localized: "prefs.diagnostics",
+                   defaultValue: "Diagnostics")
+        }
+        static var verboseDiagnostics: String {
+            String(localized: "prefs.verboseDiagnostics",
+                   defaultValue: "Verbose diagnostics logging")
+        }
+        static var verboseDiagnosticsHelp: String {
+            String(localized: "prefs.verboseDiagnosticsHelp",
+                   defaultValue: "Include detailed troubleshooting events in Activity Log (useful for support/debugging).")
+        }
         static var reset: String {
             String(localized: "prefs.reset",
                    defaultValue: "Reset")

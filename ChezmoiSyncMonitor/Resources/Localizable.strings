@@ -238,6 +238,9 @@
 "prefs.preferredMergeTool" = "Preferred merge tool:";
 "prefs.startup" = "Startup";
 "prefs.launchAtLogin" = "Launch at login";
+"prefs.diagnostics" = "Diagnostics";
+"prefs.verboseDiagnostics" = "Verbose diagnostics logging";
+"prefs.verboseDiagnosticsHelp" = "Include detailed troubleshooting events in Activity Log (useful for support/debugging).";
 "prefs.reset" = "Reset";
 "prefs.resetAllSettings" = "Reset All Settings";
 "prefs.resetConfirmTitle" = "Reset all settings to defaults?";

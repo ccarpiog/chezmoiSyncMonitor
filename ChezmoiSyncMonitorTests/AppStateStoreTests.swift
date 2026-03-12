@@ -264,23 +264,23 @@ final class AppStateStoreTests: XCTestCase {
         let store = makeStore()
         await store.addSingle(path: ".bashrc")
 
-        XCTAssertEqual(mockChezmoi.pullSourceCallCount, 1, "Should pull source before add")
+        XCTAssertEqual(mockChezmoi.pullSourceCallCount, 0, "Add should not be blocked by pre-add pull")
         XCTAssertTrue(mockChezmoi.addedPaths.contains(".bashrc"))
     } // End of func testAddSingleCallsChezmoiAdd()
 
-    /// Tests that addSingle aborts if pullSource fails.
+    /// Tests that addSingle still runs even if pullSource would fail.
     @MainActor
-    func testAddSingleAbortsOnPullFailure() async {
+    func testAddSingleDoesNotDependOnPullSource() async {
         mockChezmoi.pullSourceError = AppError.unknown("network error")
         mockChezmoi.statusResult = []
 
         let store = makeStore()
         await store.addSingle(path: ".bashrc")
 
-        XCTAssertTrue(mockChezmoi.addedPaths.isEmpty, "Should not add when pull fails")
-        let errorEvents = store.activityLog.filter { $0.eventType == .error }
-        XCTAssertTrue(errorEvents.contains { $0.message.contains("pull source before adding") })
-    } // End of func testAddSingleAbortsOnPullFailure()
+        XCTAssertEqual(mockChezmoi.pullSourceCallCount, 0, "Add should not call pullSource")
+        XCTAssertTrue(mockChezmoi.addedPaths.contains(".bashrc"))
+        XCTAssertFalse(store.activityLog.contains { $0.message.contains("pull source before adding") })
+    } // End of func testAddSingleDoesNotDependOnPullSource()
 
     /// Tests that addAllSafe only adds localDrift files and excludes dualDrift/error.
     @MainActor
@@ -302,7 +302,7 @@ final class AppStateStoreTests: XCTestCase {
         await store.addAllSafe()
 
         // Should only have added .bashrc and .gitconfig
-        XCTAssertEqual(mockChezmoi.pullSourceCallCount, 1, "Should pull source before batch add")
+        XCTAssertEqual(mockChezmoi.pullSourceCallCount, 0, "Batch add should not be blocked by pre-add pull")
         XCTAssertEqual(mockChezmoi.addedPaths.sorted(), [".bashrc", ".gitconfig"])
     } // End of func testAddAllSafeOnlyAddsLocalDriftFiles()
 

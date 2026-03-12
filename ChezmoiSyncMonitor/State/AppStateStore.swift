@@ -245,9 +245,13 @@ final class AppStateStore {
 
     /// Performs a refresh bypassing the debounce window.
     /// Use after mutations (add, update) to ensure the UI updates immediately.
-    private func forceRefresh() async {
+    ///
+    /// - Parameter includeFetch: Whether to run `git fetch` in this forced refresh.
+    ///   Local-only mutations like `add` can skip fetch to avoid waiting on network
+    ///   before updating the dashboard state.
+    private func forceRefresh(includeFetch: Bool = true) async {
         await refreshCoordinator.forcePerform { [self] in
-            await self.performRefresh()
+            await self.performRefresh(includeFetch: includeFetch)
         }
     } // End of func forceRefresh()
 
@@ -256,12 +260,12 @@ final class AppStateStore {
     /// Wraps the pipeline in a timeout task. If the entire refresh exceeds
     /// `refreshTimeoutSeconds`, it is cancelled and the state is set to `.stale`.
     /// No automatic retry is attempted; the next poll cycle will handle it.
-    private func performRefresh() async {
+    private func performRefresh(includeFetch: Bool = true) async {
         refreshState = .running
         appendDebugRefreshEvent(Strings.diagnostics.refreshStart)
 
         let refreshTask = Task {
-            try await self.executeRefreshPipeline()
+            try await self.executeRefreshPipeline(includeFetch: includeFetch)
         }
 
         // Set up a timeout watchdog for the entire refresh pipeline
@@ -300,16 +304,20 @@ final class AppStateStore {
     ///
     /// Separated from `performRefresh` to allow wrapping with a timeout task.
     /// - Throws: `AppError` if any CLI command fails, or `CancellationError` if timed out.
-    private func executeRefreshPipeline() async throws {
+    private func executeRefreshPipeline(includeFetch: Bool = true) async throws {
         appendDebugRefreshEvent(Strings.diagnostics.refreshValidateAutomation)
         await refreshMutationMode(logTransition: true)
 
         // Step 2: Git fetch if enabled
         appendDebugRefreshEvent(Strings.diagnostics.refreshGitFetch)
-        if preferences.autoFetchEnabled {
+        if includeFetch && preferences.autoFetchEnabled {
             _ = try await gitService.fetch()
             appendDebugRefreshEvent(
                 Strings.diagnostics.refreshStepResult("git fetch completed")
+            )
+        } else if !includeFetch {
+            appendDebugRefreshEvent(
+                Strings.diagnostics.refreshStepResult("git fetch skipped (local mutation refresh)")
             )
         } else {
             appendDebugRefreshEvent(
@@ -324,6 +332,11 @@ final class AppStateStore {
         let localFiles = try await chezmoiService.status()
         appendDebugRefreshEvent(
             Strings.diagnostics.refreshStepResult("chezmoi status returned \(localFiles.count) drift file(s)")
+        )
+        appendDebugRefreshEvent(
+            Strings.diagnostics.refreshStepResult(
+                "chezmoi status paths: \(debugFilePathPreview(localFiles.map(\.path)))"
+            )
         )
 
         try Task.checkCancellation()
@@ -406,6 +419,12 @@ final class AppStateStore {
             remoteChangedFiles: remoteChanged,
             trackedFiles: trackedFiles
         )
+        let localClassifiedPaths = classifiedFiles.filter { $0.state == .localDrift }.map(\.path)
+        appendDebugRefreshEvent(
+            Strings.diagnostics.refreshStepResult(
+                "classified local-drift paths: \(debugFilePathPreview(localClassifiedPaths))"
+            )
+        )
 
         // Step 7: Build snapshot
         let now = Date()
@@ -432,18 +451,128 @@ final class AppStateStore {
         appendDebugRefreshEvent(Strings.diagnostics.refreshComplete)
     } // End of func executeRefreshPipeline()
 
-    /// Appends a verbose refresh diagnostic event in Debug builds only.
+    /// Appends a verbose refresh diagnostic event when diagnostics are enabled.
     ///
-    /// This keeps Release activity logs clean while providing detailed
-    /// step-by-step traces for troubleshooting during development.
+    /// Debug builds always enable diagnostics. Release builds use the runtime
+    /// diagnostics toggle from preferences.
     private func appendDebugRefreshEvent(_ message: String) {
+        appendDebugEvent(message)
+    } // End of func appendDebugRefreshEvent(_:)
+
+    /// Returns true when verbose diagnostics are enabled for the current runtime.
+    ///
+    /// Debug builds always enable diagnostics. Release builds require the
+    /// runtime preference toggle to be enabled.
+    private var isDiagnosticsLoggingEnabled: Bool {
         #if DEBUG
+        return true
+        #else
+        return preferences.verboseDiagnosticsEnabled
+        #endif
+    } // End of isDiagnosticsLoggingEnabled
+
+    /// Appends a diagnostics event to the activity log when enabled.
+    private func appendDebugEvent(_ message: String, relatedFilePath: String? = nil) {
+        guard isDiagnosticsLoggingEnabled else { return }
         appendEvent(ActivityEvent(
             eventType: .refresh,
-            message: message
+            message: message,
+            relatedFilePath: relatedFilePath
         ))
-        #endif
-    } // End of func appendDebugRefreshEvent(_:)
+    } // End of func appendDebugEvent(_:relatedFilePath:)
+
+    /// Returns a compact summary of a command result suitable for the activity log.
+    private func debugCommandSummary(_ result: CommandResult) -> String {
+        let stdout = debugTruncate(result.stdout)
+        let stderr = debugTruncate(result.stderr)
+        return "exit=\(result.exitCode), command=\"\(result.command)\", stdout=\"\(stdout)\", stderr=\"\(stderr)\""
+    } // End of func debugCommandSummary(_:)
+
+    /// Truncates long strings for debug log readability.
+    private func debugTruncate(_ text: String, maxLength: Int = 220) -> String {
+        let singleLine = text
+            .replacingOccurrences(of: "\n", with: "\\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard singleLine.count > maxLength else { return singleLine }
+        let endIndex = singleLine.index(singleLine.startIndex, offsetBy: maxLength)
+        return String(singleLine[..<endIndex]) + "...(truncated)"
+    } // End of func debugTruncate(_:maxLength:)
+
+    /// Builds a preview for path arrays to keep debug logs concise.
+    private func debugFilePathPreview(_ paths: [String], maxItems: Int = 12) -> String {
+        guard !paths.isEmpty else { return "(none)" }
+        let sorted = paths.sorted()
+        let preview = sorted.prefix(maxItems).joined(separator: ", ")
+        if sorted.count > maxItems {
+            return "\(preview), ... +\(sorted.count - maxItems) more"
+        }
+        return preview
+    } // End of func debugFilePathPreview(_:maxItems:)
+
+    /// Logs status and git branch state immediately after an add operation.
+    private func debugLogPostAddState(for path: String) async {
+        do {
+            let statusFiles = try await chezmoiService.status()
+            if let statusFile = statusFiles.first(where: { $0.path == path }) {
+                let actions = statusFile.availableActions.map(\.rawValue).joined(separator: ",")
+                appendDebugEvent(
+                    Strings.diagnostics.refreshStepResult(
+                        "post-add chezmoi status for \(path): state=\(statusFile.state.displayName), localMissing=\(statusFile.localMissing), actions=\(actions)"
+                    ),
+                    relatedFilePath: path
+                )
+            } else {
+                appendDebugEvent(
+                    Strings.diagnostics.refreshStepResult("post-add chezmoi status for \(path): clean/not listed"),
+                    relatedFilePath: path
+                )
+            }
+        } catch {
+            appendDebugEvent(
+                Strings.diagnostics.refreshStepResult(
+                    "post-add status check failed for \(path): \(error.localizedDescription)"
+                ),
+                relatedFilePath: path
+            )
+        }
+
+        do {
+            let (ahead, behind) = try await gitService.aheadBehind()
+            appendDebugEvent(
+                Strings.diagnostics.refreshStepResult(
+                    "post-add git ahead/behind for \(path): ahead=\(ahead), behind=\(behind)"
+                ),
+                relatedFilePath: path
+            )
+        } catch {
+            appendDebugEvent(
+                Strings.diagnostics.refreshStepResult(
+                    "post-add git ahead/behind failed for \(path): \(error.localizedDescription)"
+                ),
+                relatedFilePath: path
+            )
+        }
+    } // End of func debugLogPostAddState(for:)
+
+    /// Logs the current snapshot state for a single file path.
+    private func debugLogSnapshotState(for path: String, context: String) {
+        if let file = snapshot.files.first(where: { $0.path == path }) {
+            let actions = file.availableActions.map(\.rawValue).joined(separator: ",")
+            appendDebugEvent(
+                Strings.diagnostics.refreshStepResult(
+                    "snapshot \(context) for \(path): state=\(file.state.displayName), localMissing=\(file.localMissing), actions=\(actions)"
+                ),
+                relatedFilePath: path
+            )
+        } else {
+            appendDebugEvent(
+                Strings.diagnostics.refreshStepResult(
+                    "snapshot \(context) for \(path): file not present"
+                ),
+                relatedFilePath: path
+            )
+        }
+    } // End of func debugLogSnapshotState(for:context:)
 
     // MARK: - Mutation safety
 
@@ -523,33 +652,43 @@ final class AppStateStore {
             return
         }
 
-        do {
-            _ = try await chezmoiService.pullSource()
-        } catch {
-            appendEvent(ActivityEvent(
-                eventType: .error,
-                message: "Failed to pull source before adding \(path): \(error.localizedDescription)",
-                relatedFilePath: path
-            ))
-            await forceRefresh()
-            return
-        }
+        appendDebugEvent(
+            Strings.diagnostics.refreshStepResult("addSingle requested for \(path)"),
+            relatedFilePath: path
+        )
 
         do {
-            _ = try await chezmoiService.add(path: path)
+            let addResult = try await chezmoiService.add(path: path)
+            appendDebugEvent(
+                Strings.diagnostics.refreshStepResult(
+                    "addSingle command result for \(path): \(debugCommandSummary(addResult))"
+                ),
+                relatedFilePath: path
+            )
+
             appendEvent(ActivityEvent(
                 eventType: .add,
                 message: "Added \(path) to source state",
                 relatedFilePath: path
             ))
-            await forceRefresh()
+
+            await debugLogPostAddState(for: path)
+            await forceRefresh(includeFetch: false)
+            debugLogSnapshotState(for: path, context: "after forced refresh (no fetch)")
         } catch {
             appendEvent(ActivityEvent(
                 eventType: .error,
                 message: "Failed to add \(path): \(error.localizedDescription)",
                 relatedFilePath: path
             ))
-            await forceRefresh()
+            appendDebugEvent(
+                Strings.diagnostics.refreshStepResult(
+                    "addSingle failed for \(path): \(error.localizedDescription)"
+                ),
+                relatedFilePath: path
+            )
+            await forceRefresh(includeFetch: false)
+            debugLogSnapshotState(for: path, context: "after add failure refresh (no fetch)")
         }
     } // End of func addSingle(path:)
 
@@ -562,31 +701,35 @@ final class AppStateStore {
         }
 
         let safeFiles = snapshot.files.filter { $0.state == .localDrift }
+        appendDebugEvent(
+            Strings.diagnostics.refreshStepResult("addAllSafe candidates: \(safeFiles.count)")
+        )
 
         guard !safeFiles.isEmpty else { return }
-
-        do {
-            _ = try await chezmoiService.pullSource()
-        } catch {
-            appendEvent(ActivityEvent(
-                eventType: .error,
-                message: "Failed to pull source before batch add: \(error.localizedDescription)"
-            ))
-            await forceRefresh()
-            return
-        }
 
         var addedCount = 0
         for file in safeFiles {
             do {
-                _ = try await chezmoiService.add(path: file.path)
+                let result = try await chezmoiService.add(path: file.path)
                 addedCount += 1
+                appendDebugEvent(
+                    Strings.diagnostics.refreshStepResult(
+                        "addAllSafe command result for \(file.path): \(debugCommandSummary(result))"
+                    ),
+                    relatedFilePath: file.path
+                )
             } catch {
                 appendEvent(ActivityEvent(
                     eventType: .error,
                     message: "Failed to add \(file.path): \(error.localizedDescription)",
                     relatedFilePath: file.path
                 ))
+                appendDebugEvent(
+                    Strings.diagnostics.refreshStepResult(
+                        "addAllSafe failed for \(file.path): \(error.localizedDescription)"
+                    ),
+                    relatedFilePath: file.path
+                )
             }
         } // End of loop adding safe files
 
@@ -597,7 +740,12 @@ final class AppStateStore {
             ))
         }
 
-        await forceRefresh()
+        await forceRefresh(includeFetch: false)
+        appendDebugEvent(
+            Strings.diagnostics.refreshStepResult(
+                "addAllSafe post-refresh summary: local=\(snapshot.localDriftCount), remote=\(snapshot.remoteDriftCount), dual=\(snapshot.conflictCount), error=\(snapshot.errorCount), clean=\(snapshot.cleanCount)"
+            )
+        )
     } // End of func addAllSafe()
 
     /// Applies remote changes for a single file.

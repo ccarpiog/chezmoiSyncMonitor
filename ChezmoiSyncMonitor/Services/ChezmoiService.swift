@@ -27,8 +27,10 @@ final class ChezmoiService: ChezmoiServiceProtocol, Sendable {
 
     /// Runs `chezmoi status` and parses the output into `FileStatus` objects.
     ///
-    /// Chezmoi status format: each line is `XY path` where X = source change,
-    /// Y = destination change. Letters: A (add), D (delete), M (modify), R (rename).
+    /// Chezmoi status format: each line is `XY path` where:
+    /// - X = difference between last state written by chezmoi and actual state
+    /// - Y = difference between actual state and target state (what apply would do)
+    /// Letters: A (add), D (delete), M (modify), R (run script).
     ///
     /// - Returns: An array of `FileStatus` values representing files with drift.
     /// - Throws: `AppError` if the command fails or output cannot be parsed.
@@ -56,10 +58,15 @@ final class ChezmoiService: ChezmoiServiceProtocol, Sendable {
     /// Parses the raw output of `chezmoi status` into `FileStatus` objects.
     ///
     /// `chezmoi status` output format: each line is two status characters followed by a space
-    /// and the file path. The characters indicate what would change if `chezmoi apply` were run.
-    /// At this stage, all files with changes are marked as `localDrift` (local file differs
-    /// from chezmoi source). The `FileStateEngine` (Phase 4) will reclassify states by
-    /// combining this with git remote information.
+    /// and the file path.
+    ///
+    /// Important: we only include entries where the SECOND status column is non-space,
+    /// because that column represents actual-vs-target drift (what `chezmoi apply`
+    /// would change). First-column-only entries (e.g., `M  path`) can happen right
+    /// after `chezmoi add` and do not mean the destination is out of sync with target.
+    ///
+    /// At this stage, included files are marked as `localDrift`. The `FileStateEngine`
+    /// (Phase 4) will reclassify states by combining this with git remote information.
     ///
     /// Exposed as an internal static method to allow unit testing without
     /// running the actual chezmoi binary.
@@ -74,32 +81,26 @@ final class ChezmoiService: ChezmoiServiceProtocol, Sendable {
         for line in output.components(separatedBy: .newlines) {
             guard line.count >= 3 else { continue }
 
-            let firstChar = line[line.startIndex]
             let secondChar = line[line.index(after: line.startIndex)]
             let pathStartIndex = line.index(line.startIndex, offsetBy: 2)
             let path = String(line[pathStartIndex...]).trimmingCharacters(in: .whitespaces)
 
             guard !path.isEmpty else { continue }
 
-            let hasChange = firstChar != " " || secondChar != " "
-
-            // At this stage we only know local-vs-source drift from chezmoi.
-            // Remote drift classification happens in FileStateEngine after git fetch.
-            let state: FileSyncState = hasChange ? .localDrift : .clean
+            // Only second-column changes represent apply-needed drift.
+            guard secondChar != " " else { continue }
 
             // When the destination status char is 'A', the local file does not
             // exist on disk — chezmoi would need to Add (create) it.
             let isLocalMissing = secondChar == "A"
 
             var actions: [FileAction] = [.viewDiff]
-            if state == .localDrift {
-                actions.append(.syncLocal)
-                actions.append(.openEditor)
-            }
+            actions.append(.syncLocal)
+            actions.append(.openEditor)
 
             results.append(FileStatus(
                 path: path,
-                state: state,
+                state: .localDrift,
                 availableActions: actions,
                 localMissing: isLocalMissing
             ))
