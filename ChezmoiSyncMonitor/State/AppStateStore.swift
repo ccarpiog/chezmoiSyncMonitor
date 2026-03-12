@@ -782,6 +782,7 @@ final class AppStateStore {
                 relatedFilePath: path
             ))
 
+            await normalizeModeOnlyPostAddDriftIfNeeded(for: path)
             await debugLogPostAddState(for: path)
             await forceRefresh(includeFetch: false)
             debugLogSnapshotState(for: path, context: "after forced refresh (no fetch)")
@@ -801,6 +802,79 @@ final class AppStateStore {
             debugLogSnapshotState(for: path, context: "after add failure refresh (no fetch)")
         }
     } // End of func addSingle(path:)
+
+    /// Resolves mode-only drift that can remain after `chezmoi add`.
+    ///
+    /// Chezmoi canonicalizes executable files to mode 0755. If a local file has
+    /// a different executable mode (e.g., 0711), `add` can succeed while status
+    /// still reports local drift. In that case we apply the file once so local
+    /// mode matches the tracked target mode.
+    private func normalizeModeOnlyPostAddDriftIfNeeded(for path: String) async {
+        do {
+            let statusFiles = try await chezmoiService.status()
+            guard let statusFile = statusFiles.first(where: { $0.path == path }),
+                  statusFile.state == .localDrift else {
+                appendDebugEvent(
+                    Strings.diagnostics.refreshStepResult("post-add mode-normalize skipped for \(path): file is already clean"),
+                    relatedFilePath: path
+                )
+                return
+            }
+
+            let diff = try await chezmoiService.diff(for: path)
+            guard isModeOnlyDiff(diff) else {
+                appendDebugEvent(
+                    Strings.diagnostics.refreshStepResult("post-add mode-normalize skipped for \(path): drift is not mode-only"),
+                    relatedFilePath: path
+                )
+                return
+            }
+
+            let applyResult = try await chezmoiService.apply(path: path)
+            appendDebugEvent(
+                Strings.diagnostics.refreshStepResult(
+                    "post-add mode-normalize apply result for \(path): \(debugCommandSummary(applyResult))"
+                ),
+                relatedFilePath: path
+            )
+        } catch {
+            appendDebugEvent(
+                Strings.diagnostics.refreshStepResult(
+                    "post-add mode-normalize failed for \(path): \(error.localizedDescription)"
+                ),
+                relatedFilePath: path
+            )
+        }
+    } // End of func normalizeModeOnlyPostAddDriftIfNeeded(for:)
+
+    /// Returns true when a diff contains only file mode changes and no content changes.
+    private func isModeOnlyDiff(_ diff: String) -> Bool {
+        let lines = diff
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+
+        guard !lines.isEmpty else { return false }
+        var sawOldMode = false
+        var sawNewMode = false
+
+        for line in lines {
+            if line.hasPrefix("diff --git ") || line.hasPrefix("index ") {
+                continue
+            }
+            if line.hasPrefix("old mode ") {
+                sawOldMode = true
+                continue
+            }
+            if line.hasPrefix("new mode ") {
+                sawNewMode = true
+                continue
+            }
+            return false
+        }
+
+        return sawOldMode && sawNewMode
+    } // End of func isModeOnlyDiff(_:)
 
     /// Adds all safe files (localDrift only) to the chezmoi source state.
     ///

@@ -306,6 +306,46 @@ final class AppStateStoreTests: XCTestCase {
         XCTAssertEqual(mockChezmoi.addedPaths.sorted(), [".bashrc", ".gitconfig"])
     } // End of func testAddAllSafeOnlyAddsLocalDriftFiles()
 
+    /// Tests that addSingle auto-normalizes mode-only drift by applying the same file.
+    @MainActor
+    func testAddSingleNormalizesModeOnlyDrift() async {
+        mockChezmoi.statusResult = [
+            FileStatus(path: ".bashrc", state: .localDrift)
+        ]
+        mockChezmoi.diffResult = """
+        diff --git a/.bashrc b/.bashrc
+        old mode 100711
+        new mode 100755
+        """
+
+        let store = makeStore()
+        await store.addSingle(path: ".bashrc")
+
+        XCTAssertEqual(mockChezmoi.appliedPaths, [".bashrc"], "Mode-only drift should be normalized via apply")
+    } // End of func testAddSingleNormalizesModeOnlyDrift()
+
+    /// Tests that addSingle does not auto-apply when drift includes content changes.
+    @MainActor
+    func testAddSingleDoesNotNormalizeContentDrift() async {
+        mockChezmoi.statusResult = [
+            FileStatus(path: ".bashrc", state: .localDrift)
+        ]
+        mockChezmoi.diffResult = """
+        diff --git a/.bashrc b/.bashrc
+        index 123..456 100644
+        --- a/.bashrc
+        +++ b/.bashrc
+        @@ -1 +1 @@
+        -old
+        +new
+        """
+
+        let store = makeStore()
+        await store.addSingle(path: ".bashrc")
+
+        XCTAssertTrue(mockChezmoi.appliedPaths.isEmpty, "Content drift should not be auto-normalized via apply")
+    } // End of func testAddSingleDoesNotNormalizeContentDrift()
+
     // MARK: - Single-file apply tests
 
     /// Helper to set up the snapshot with a remoteDrift file for updateSingle tests.
