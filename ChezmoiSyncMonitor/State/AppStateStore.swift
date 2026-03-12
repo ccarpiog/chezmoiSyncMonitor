@@ -511,6 +511,8 @@ final class AppStateStore {
 
     /// Logs status and git branch state immediately after an add operation.
     private func debugLogPostAddState(for path: String) async {
+        guard isDiagnosticsLoggingEnabled else { return }
+
         do {
             let statusFiles = try await chezmoiService.status()
             if let statusFile = statusFiles.first(where: { $0.path == path }) {
@@ -552,7 +554,115 @@ final class AppStateStore {
                 relatedFilePath: path
             )
         }
+
+        do {
+            let diff = try await chezmoiService.diff(for: path)
+            let trimmedDiff = diff.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmedDiff.isEmpty {
+                appendDebugEvent(
+                    Strings.diagnostics.refreshStepResult("post-add chezmoi diff for \(path): empty"),
+                    relatedFilePath: path
+                )
+            } else {
+                let lineCount = diff.split(whereSeparator: \.isNewline).count
+                appendDebugEvent(
+                    Strings.diagnostics.refreshStepResult(
+                        "post-add chezmoi diff for \(path): lines=\(lineCount), preview=\(debugTruncate(trimmedDiff, maxLength: 320))"
+                    ),
+                    relatedFilePath: path
+                )
+            }
+        } catch {
+            appendDebugEvent(
+                Strings.diagnostics.refreshStepResult(
+                    "post-add diff check failed for \(path): \(error.localizedDescription)"
+                ),
+                relatedFilePath: path
+            )
+        }
+
+        do {
+            let sourcePath = try await chezmoiService.sourcePath(for: path)
+            let localPath = expandedLocalPath(for: path)
+            appendDebugEvent(
+                Strings.diagnostics.refreshStepResult(
+                    "post-add source/local paths for \(path): source=\(sourcePath), local=\(localPath)"
+                ),
+                relatedFilePath: path
+            )
+
+            let sourceMetadata = debugFileMetadata(atPath: sourcePath)
+            let localMetadata = debugFileMetadata(atPath: localPath)
+            appendDebugEvent(
+                Strings.diagnostics.refreshStepResult(
+                    "post-add source metadata for \(path): \(sourceMetadata)"
+                ),
+                relatedFilePath: path
+            )
+            appendDebugEvent(
+                Strings.diagnostics.refreshStepResult(
+                    "post-add local metadata for \(path): \(localMetadata)"
+                ),
+                relatedFilePath: path
+            )
+
+            do {
+                let sourceData = try Data(contentsOf: URL(fileURLWithPath: sourcePath), options: [.mappedIfSafe])
+                let localData = try Data(contentsOf: URL(fileURLWithPath: localPath), options: [.mappedIfSafe])
+                appendDebugEvent(
+                    Strings.diagnostics.refreshStepResult(
+                        "post-add source/local bytes for \(path): equal=\(sourceData == localData), sourceBytes=\(sourceData.count), localBytes=\(localData.count)"
+                    ),
+                    relatedFilePath: path
+                )
+            } catch {
+                appendDebugEvent(
+                    Strings.diagnostics.refreshStepResult(
+                        "post-add byte-compare failed for \(path): \(error.localizedDescription)"
+                    ),
+                    relatedFilePath: path
+                )
+            }
+        } catch {
+            appendDebugEvent(
+                Strings.diagnostics.refreshStepResult(
+                    "post-add source-path check failed for \(path): \(error.localizedDescription)"
+                ),
+                relatedFilePath: path
+            )
+        }
     } // End of func debugLogPostAddState(for:)
+
+    /// Expands a managed file path into an absolute path under the current user's home.
+    private func expandedLocalPath(for path: String) -> String {
+        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        let expanded = (trimmed as NSString).expandingTildeInPath
+        if expanded.hasPrefix("/") {
+            return expanded
+        }
+        return (NSHomeDirectory() as NSString).appendingPathComponent(expanded)
+    } // End of func expandedLocalPath(for:)
+
+    /// Returns concise file metadata for diagnostics logs.
+    private func debugFileMetadata(atPath path: String) -> String {
+        let fileManager = FileManager.default
+        var isDirectory: ObjCBool = false
+        let exists = fileManager.fileExists(atPath: path, isDirectory: &isDirectory)
+        guard exists else { return "exists=false" }
+
+        do {
+            let attrs = try fileManager.attributesOfItem(atPath: path)
+            let size = (attrs[.size] as? NSNumber)?.intValue ?? -1
+            let permissions = (attrs[.posixPermissions] as? NSNumber)?.intValue ?? -1
+            let type = (attrs[.type] as? FileAttributeType) == .typeSymbolicLink ? "symlink" : "file"
+            let mode = permissions >= 0
+                ? String(format: "0%o", permissions)
+                : "unknown"
+            return "exists=true,type=\(type),isDir=\(isDirectory.boolValue),size=\(size),mode=\(mode)"
+        } catch {
+            return "exists=true,metadataError=\(error.localizedDescription)"
+        }
+    } // End of func debugFileMetadata(atPath:)
 
     /// Logs the current snapshot state for a single file path.
     private func debugLogSnapshotState(for path: String, context: String) {
