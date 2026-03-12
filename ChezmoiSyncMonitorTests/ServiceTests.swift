@@ -308,4 +308,27 @@ final class ServiceTests: XCTestCase {
             GitService.isNoRemoteConfiguredError("fatal: No remote repository specified.")
         )
     }
+
+    /// Verifies diverged-branch stderr is detected for pull fallback.
+    func testIsDivergedBranchPullError() {
+        XCTAssertTrue(
+            ChezmoiService.isDivergedBranchPullError(
+                "fatal: Not possible to fast-forward, aborting."
+            )
+        )
+        XCTAssertTrue(
+            ChezmoiService.isDivergedBranchPullError(
+                "hint: Diverging branches can't be fast-forwarded"
+            )
+        )
+    }
+
+    /// Verifies unrelated stderr does not trigger diverged-branch fallback.
+    func testIsDivergedBranchPullErrorFalse() {
+        XCTAssertFalse(
+            ChezmoiService.isDivergedBranchPullError(
+                "fatal: could not read from remote repository"
+            )
+        )
+    }
 } // End of class ServiceTests

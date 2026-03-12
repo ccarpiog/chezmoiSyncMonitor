@@ -143,8 +143,9 @@ final class ChezmoiService: ChezmoiServiceProtocol, Sendable {
 
     /// Pulls remote changes into the chezmoi source state without applying them.
     ///
-    /// Uses a fast-forward-only git pull in the chezmoi source repo to avoid
-    /// rebase-based detached-HEAD states if the process is interrupted.
+    /// Uses a fast-forward-only git pull in the chezmoi source repo by default.
+    /// If branches have diverged, falls back to a non-rebase merge pull so the
+    /// app can reconcile histories without forcing users into manual CLI steps.
     ///
     /// - Returns: The `CommandResult` of the pull command.
     /// - Throws: `AppError` if the chezmoi command fails.
@@ -153,22 +154,49 @@ final class ChezmoiService: ChezmoiServiceProtocol, Sendable {
 
         // Use a longer timeout than the ProcessRunner default because network/auth
         // round-trips can exceed 30s on some machines.
-        let result = try await runSourceGit(
+        let ffOnlyResult = try await runSourceGit(
             arguments: ["pull", "--no-rebase", "--ff-only", "--autostash"],
             timeout: 120,
             throwOnFailure: false
         )
 
-        if result.exitCode != 0 {
+        if ffOnlyResult.exitCode == 0 {
+            return ffOnlyResult
+        }
+
+        // If histories diverged, fall back to merge pull (still non-rebase).
+        // `--no-edit` prevents editor prompts in non-interactive app flows.
+        if Self.isDivergedBranchPullError(ffOnlyResult.stderr) {
+            let mergeResult = try await runSourceGit(
+                arguments: ["pull", "--no-rebase", "--no-edit", "--autostash"],
+                timeout: 120,
+                throwOnFailure: false
+            )
+            if mergeResult.exitCode == 0 {
+                return mergeResult
+            }
             throw AppError.cliFailure(
-                command: result.command,
-                exitCode: result.exitCode,
-                stderr: result.stderr
+                command: mergeResult.command,
+                exitCode: mergeResult.exitCode,
+                stderr: mergeResult.stderr
             )
         }
 
-        return result
+        throw AppError.cliFailure(
+            command: ffOnlyResult.command,
+            exitCode: ffOnlyResult.exitCode,
+            stderr: ffOnlyResult.stderr
+        )
     } // End of func pullSource()
+
+    /// Returns true if stderr indicates pull failed due to branch divergence.
+    ///
+    /// Exposed internally for unit tests.
+    static func isDivergedBranchPullError(_ stderr: String) -> Bool {
+        let normalized = stderr.lowercased()
+        return normalized.contains("diverging branches can't be fast-forwarded") ||
+            normalized.contains("not possible to fast-forward, aborting")
+    } // End of static func isDivergedBranchPullError(_:)
 
     /// Ensures the chezmoi source repo is on an attached local branch.
     ///
