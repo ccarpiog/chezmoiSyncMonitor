@@ -55,6 +55,13 @@ struct MenuBarView: View {
                     .padding(.horizontal, 12)
             }
 
+            // MARK: - View-only safety banner
+            if appState.isViewOnlyMode, let warning = appState.viewOnlyWarning {
+                viewOnlyBanner(message: warning)
+                Divider()
+                    .padding(.horizontal, 12)
+            }
+
             // MARK: - Header section
             headerSection
 
@@ -134,6 +141,26 @@ struct MenuBarView: View {
         .padding(.vertical, 6)
     } // End of computed property offlineBanner
 
+    /// Warning banner shown when mutating actions are disabled by safety checks.
+    private func viewOnlyBanner(message: String) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+                .padding(.top, 1)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(Strings.safety.viewOnlyTitle)
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                Text(message)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(4)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+    } // End of func viewOnlyBanner(message:)
+
     // MARK: - Counts
 
     /// Rows showing per-state file counts, only visible when count > 0.
@@ -210,7 +237,7 @@ struct MenuBarView: View {
             menuButton(
                 Strings.menu.addLocalChanges,
                 icon: "plus.circle",
-                disabled: appState.snapshot.localDriftCount == 0 || isRefreshing
+                disabled: appState.snapshot.localDriftCount == 0 || isRefreshing || appState.isViewOnlyMode
             ) {
                 Task { await appState.addAllSafe() }
             }
@@ -218,7 +245,7 @@ struct MenuBarView: View {
             menuButton(
                 Strings.menu.commitAndPush,
                 icon: "arrow.up.circle",
-                disabled: isRefreshing
+                disabled: isRefreshing || appState.isViewOnlyMode
             ) {
                 Task { await appState.commitAndPush() }
             }
@@ -227,7 +254,7 @@ struct MenuBarView: View {
                 menuButton(
                     Strings.menu.applySafeRemote,
                     icon: "arrow.down.circle",
-                    disabled: appState.snapshot.remoteDriftCount == 0 || isRefreshing
+                    disabled: appState.snapshot.remoteDriftCount == 0 || isRefreshing || appState.isViewOnlyMode
                 ) {
                     Task { await appState.updateSafe() }
                 }

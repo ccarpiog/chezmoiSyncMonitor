@@ -86,6 +86,17 @@ final class MockChezmoiService: ChezmoiServiceProtocol, @unchecked Sendable {
         return trackedFilesResult
     }
 
+    var gitAutomationConfigResult: GitAutomationConfig = GitAutomationConfig(
+        autoCommit: true,
+        autoPush: true
+    )
+    var gitAutomationConfigError: Error?
+
+    func gitAutomationConfig() async throws -> GitAutomationConfig {
+        if let error = gitAutomationConfigError { throw error }
+        return gitAutomationConfigResult
+    }
+
     var forgetResult: CommandResult = CommandResult(exitCode: 0, stdout: "", stderr: "", duration: 0, command: "chezmoi forget")
     var forgetError: Error?
 
@@ -512,6 +523,7 @@ final class AppStateStoreTests: XCTestCase {
 
         await store.forgetSingle(path: ".bashrc")
 
+        XCTAssertEqual(mockChezmoi.pullSourceCallCount, 1, "Should pull source before forget")
         XCTAssertTrue(mockChezmoi.forgottenPaths.contains(".bashrc"), "Should call forget with the path")
         // Should have logged a success event
         let updateEvents = store.activityLog.filter { $0.eventType == .update }
@@ -528,11 +540,40 @@ final class AppStateStoreTests: XCTestCase {
 
         await store.forgetSingle(path: ".bashrc")
 
+        XCTAssertEqual(mockChezmoi.pullSourceCallCount, 1, "Should pull source before forget")
         // Should have logged an error event
         XCTAssertTrue(store.activityLog.contains { $0.eventType == .error })
         let errorEvents = store.activityLog.filter { $0.eventType == .error }
         XCTAssertTrue(errorEvents.contains { $0.message.contains("Forget failed") })
     } // End of func testForgetSingleFailure()
+
+    /// forgetSingle aborts if pullSource fails.
+    @MainActor
+    func testForgetSingleAbortsOnPullFailure() async {
+        mockChezmoi.pullSourceError = AppError.unknown("network error")
+        mockChezmoi.statusResult = []
+
+        let store = makeStore()
+
+        await store.forgetSingle(path: ".bashrc")
+
+        XCTAssertTrue(mockChezmoi.forgottenPaths.isEmpty, "Should not forget when pull fails")
+        let errorEvents = store.activityLog.filter { $0.eventType == .error }
+        XCTAssertTrue(errorEvents.contains { $0.message.contains("pull source before forgetting") })
+    } // End of func testForgetSingleAbortsOnPullFailure()
+
+    /// Mutating actions are blocked when git.autocommit/autopush are not both true.
+    @MainActor
+    func testAddSingleBlockedInViewOnlyMode() async {
+        mockChezmoi.gitAutomationConfigResult = GitAutomationConfig(autoCommit: true, autoPush: false)
+
+        let store = makeStore()
+        await store.addSingle(path: ".bashrc")
+
+        XCTAssertTrue(mockChezmoi.addedPaths.isEmpty, "Should block add in view-only mode")
+        XCTAssertTrue(store.isViewOnlyMode, "Store should switch to view-only mode")
+        XCTAssertNotNil(store.viewOnlyWarning)
+    } // End of func testAddSingleBlockedInViewOnlyMode()
 
     // MARK: - Activity log bounds
 

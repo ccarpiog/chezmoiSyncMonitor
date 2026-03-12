@@ -359,6 +359,49 @@ enum Strings {
         }
     } // End of enum confirmations
 
+    // MARK: - Safety / Read-only mode
+
+    /// Strings for runtime safety gates that disable mutating actions.
+    enum safety {
+        static var viewOnlyTitle: String {
+            String(localized: "safety.viewOnlyTitle",
+                   defaultValue: "View-only mode")
+        }
+        static var enabledValue: String {
+            String(localized: "safety.enabledValue",
+                   defaultValue: "true")
+        }
+        static var disabledValue: String {
+            String(localized: "safety.disabledValue",
+                   defaultValue: "false")
+        }
+        /// Returns the read-only warning when git automation flags are explicitly disabled.
+        static func gitAutomationDisabled(autoCommit: Bool, autoPush: Bool) -> String {
+            let autoCommitText = autoCommit ? enabledValue : disabledValue
+            let autoPushText = autoPush ? enabledValue : disabledValue
+            return String(
+                format: NSLocalizedString(
+                    "safety.gitAutomationDisabled",
+                    value: "Read-only mode is active because chezmoi requires git.autocommit=true and git.autopush=true. Current values: autocommit=%@, autopush=%@. Running without both can cause unexpected behaviors and sync states.",
+                    comment: ""
+                ),
+                autoCommitText,
+                autoPushText
+            )
+        }
+        /// Returns the read-only warning when settings cannot be verified.
+        static func gitAutomationUnknown(_ detail: String) -> String {
+            String(
+                format: NSLocalizedString(
+                    "safety.gitAutomationUnknown",
+                    value: "Read-only mode is active because the app could not verify chezmoi git.autocommit/autopush (%@). Running without this verification can cause unexpected behaviors and sync states.",
+                    comment: ""
+                ),
+                detail
+            )
+        }
+    } // End of enum safety
+
     // MARK: - Activity Log
 
     /// Strings for the collapsible activity log panel.

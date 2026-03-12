@@ -10,6 +10,13 @@ import Observation
 @Observable
 final class AppStateStore {
 
+    /// Internal guard state controlling whether mutating actions are allowed.
+    private enum MutationMode: Equatable {
+        case enabled
+        case disabled(autoCommit: Bool, autoPush: Bool)
+        case unknown(String)
+    } // End of enum MutationMode
+
     // MARK: - Published state
 
     /// The current synchronization snapshot across all managed files.
@@ -29,6 +36,34 @@ final class AppStateStore {
 
     /// The loaded diff text for the diff viewer, if any.
     var currentDiff: String?
+
+    /// The current mutation mode. Defaults to read-only until validated.
+    private var mutationMode: MutationMode = .unknown(
+        "Chezmoi git automation settings have not been validated yet."
+    )
+
+    /// Whether mutating actions are currently disabled (view-only mode).
+    var isViewOnlyMode: Bool {
+        if case .enabled = mutationMode {
+            return false
+        }
+        return true
+    } // End of isViewOnlyMode
+
+    /// Warning text describing why the app is currently in view-only mode.
+    var viewOnlyWarning: String? {
+        switch mutationMode {
+        case .enabled:
+            return nil
+        case .disabled(let autoCommit, let autoPush):
+            return Strings.safety.gitAutomationDisabled(
+                autoCommit: autoCommit,
+                autoPush: autoPush
+            )
+        case .unknown(let detail):
+            return Strings.safety.gitAutomationUnknown(detail)
+        }
+    } // End of viewOnlyWarning
 
     // MARK: - Dependencies
 
@@ -76,6 +111,9 @@ final class AppStateStore {
     /// Entries are removed once they no longer appear in `chezmoi status` (i.e.,
     /// the apply succeeded and the file is clean).
     private var pendingRemoteFiles: Set<String> = []
+
+    /// Last mutation mode recorded in the activity log to avoid duplicate spam.
+    private var lastLoggedMutationMode: MutationMode?
 
     // MARK: - Initialization
 
@@ -148,6 +186,9 @@ final class AppStateStore {
                 }
             )
         }
+
+        // Validate mutation safety mode once on startup before the first user action.
+        await refreshMutationMode(logTransition: true)
 
         await watcherService?.start()
     } // End of func startServices()
@@ -237,6 +278,8 @@ final class AppStateStore {
     /// Separated from `performRefresh` to allow wrapping with a timeout task.
     /// - Throws: `AppError` if any CLI command fails, or `CancellationError` if timed out.
     private func executeRefreshPipeline() async throws {
+        await refreshMutationMode(logTransition: true)
+
         // Step 2: Git fetch if enabled
         if preferences.autoFetchEnabled {
             _ = try await gitService.fetch()
@@ -330,11 +373,84 @@ final class AppStateStore {
         await notificationService?.notifyDrift(snapshot: snapshot)
     } // End of func executeRefreshPipeline()
 
+    // MARK: - Mutation safety
+
+    /// Refreshes mutation safety mode from `chezmoi dump-config`.
+    ///
+    /// When `git.autocommit` and `git.autopush` are not both enabled, the app
+    /// enters view-only mode to avoid write operations that can create
+    /// inconsistent source-repo state across machines.
+    private func refreshMutationMode(logTransition: Bool) async {
+        do {
+            let config = try await chezmoiService.gitAutomationConfig()
+            let nextMode: MutationMode = config.isFullyEnabled
+                ? .enabled
+                : .disabled(autoCommit: config.autoCommit, autoPush: config.autoPush)
+            applyMutationMode(nextMode, logTransition: logTransition)
+        } catch {
+            let message = error.localizedDescription
+            applyMutationMode(.unknown(message), logTransition: logTransition)
+        }
+    } // End of func refreshMutationMode(logTransition:)
+
+    /// Applies a new mutation mode and optionally logs transitions.
+    private func applyMutationMode(_ mode: MutationMode, logTransition: Bool) {
+        guard mutationMode != mode else { return }
+        mutationMode = mode
+
+        guard logTransition, lastLoggedMutationMode != mode else { return }
+        lastLoggedMutationMode = mode
+
+        switch mode {
+        case .enabled:
+            appendEvent(ActivityEvent(
+                eventType: .refresh,
+                message: "Write actions re-enabled: chezmoi git.autocommit/autopush are both true"
+            ))
+        case .disabled(let autoCommit, let autoPush):
+            appendEvent(ActivityEvent(
+                eventType: .error,
+                message: "View-only mode enabled: git.autocommit=\(autoCommit), git.autopush=\(autoPush). Mutating actions are disabled to prevent unexpected states."
+            ))
+        case .unknown(let detail):
+            appendEvent(ActivityEvent(
+                eventType: .error,
+                message: "View-only mode enabled: could not verify chezmoi git automation settings (\(detail)). Mutating actions are disabled to prevent unexpected states."
+            ))
+        }
+    } // End of func applyMutationMode(_:logTransition:)
+
+    /// Returns `true` if mutating actions are currently allowed.
+    ///
+    /// Always refreshes mutation mode first so external config changes are honored
+    /// immediately when the user attempts a write action.
+    private func ensureMutatingActionsAllowed(
+        operation: String,
+        relatedFilePath: String? = nil
+    ) async -> Bool {
+        await refreshMutationMode(logTransition: false)
+
+        guard !isViewOnlyMode else {
+            let reason = viewOnlyWarning ?? "View-only mode is enabled."
+            appendEvent(ActivityEvent(
+                eventType: .error,
+                message: "Blocked \(operation): \(reason)",
+                relatedFilePath: relatedFilePath
+            ))
+            return false
+        }
+        return true
+    } // End of func ensureMutatingActionsAllowed(operation:relatedFilePath:)
+
     // MARK: - File operations
 
     /// Adds a single file to the chezmoi source state.
     /// - Parameter path: The relative file path to add.
     func addSingle(path: String) async {
+        guard await ensureMutatingActionsAllowed(operation: "add \(path)", relatedFilePath: path) else {
+            return
+        }
+
         do {
             _ = try await chezmoiService.add(path: path)
             appendEvent(ActivityEvent(
@@ -356,6 +472,10 @@ final class AppStateStore {
     ///
     /// Files with dualDrift or error states are excluded to avoid conflicts.
     func addAllSafe() async {
+        guard await ensureMutatingActionsAllowed(operation: "batch add") else {
+            return
+        }
+
         let safeFiles = snapshot.files.filter { $0.state == .localDrift }
 
         guard !safeFiles.isEmpty else { return }
@@ -394,6 +514,10 @@ final class AppStateStore {
     /// applies only the specified file to the target state.
     /// - Parameter path: The relative file path to apply.
     func updateSingle(path: String) async {
+        guard await ensureMutatingActionsAllowed(operation: "apply \(path)", relatedFilePath: path) else {
+            return
+        }
+
         // Revalidate: ensure the file is still in an apply-safe state
         guard let currentFile = snapshot.files.first(where: { $0.path == path }),
               currentFile.state == .remoteDrift || currentFile.state == .dualDrift else {
@@ -448,6 +572,10 @@ final class AppStateStore {
     /// Revalidates each file's state before applying. Iterates over each remoteDrift
     /// file independently so that a failure in one file does not block the others.
     func updateSafe() async {
+        guard await ensureMutatingActionsAllowed(operation: "batch apply remote changes") else {
+            return
+        }
+
         // Snapshot the files now and revalidate: only apply files still in remoteDrift
         let remoteFiles = snapshot.files.filter { $0.state == .remoteDrift }
 
@@ -515,6 +643,10 @@ final class AppStateStore {
     /// the file so the local copy matches the source.
     /// - Parameter path: The relative file path to revert.
     func revertLocal(path: String) async {
+        guard await ensureMutatingActionsAllowed(operation: "revert \(path)", relatedFilePath: path) else {
+            return
+        }
+
         // Revalidate: ensure the file is still in localDrift state
         guard let currentFile = snapshot.files.first(where: { $0.path == path }),
               currentFile.state == .localDrift else {
@@ -571,11 +703,27 @@ final class AppStateStore {
     /// flow serves as the safety gate.
     /// - Parameter path: The relative file path to forget.
     func forgetSingle(path: String) async {
+        guard await ensureMutatingActionsAllowed(operation: "forget \(path)", relatedFilePath: path) else {
+            return
+        }
+
         appendEvent(ActivityEvent(
             eventType: .update,
             message: "Forgetting \(path) from chezmoi tracking",
             relatedFilePath: path
         ))
+
+        do {
+            _ = try await chezmoiService.pullSource()
+        } catch {
+            appendEvent(ActivityEvent(
+                eventType: .error,
+                message: "Failed to pull source before forgetting \(path): \(error.localizedDescription)",
+                relatedFilePath: path
+            ))
+            await forceRefresh()
+            return
+        }
 
         do {
             _ = try await chezmoiService.forget(path: path)
@@ -599,6 +747,10 @@ final class AppStateStore {
     ///
     /// Uses `chezmoi git` under the hood. Logs success or failure as activity events.
     func commitAndPush() async {
+        guard await ensureMutatingActionsAllowed(operation: "commit and push") else {
+            return
+        }
+
         do {
             let hostname = ProcessInfo.processInfo.hostName
                 .components(separatedBy: ".").first ?? "unknown"
@@ -625,6 +777,16 @@ final class AppStateStore {
     /// editors like vim or long-running GUI editors are not killed by a timeout.
     /// - Parameter path: The relative file path to open.
     func openInEditor(path: String) {
+        guard !isViewOnlyMode else {
+            let reason = viewOnlyWarning ?? "View-only mode is enabled."
+            appendEvent(ActivityEvent(
+                eventType: .error,
+                message: "Blocked edit for \(path): \(reason)",
+                relatedFilePath: path
+            ))
+            return
+        }
+
         let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
         let expandedPath = (trimmed as NSString).expandingTildeInPath
         let absolutePath: String
@@ -697,6 +859,10 @@ final class AppStateStore {
     /// The external process is launched fire-and-forget (not awaited).
     /// - Parameter path: The relative file path to merge.
     func openInMergeTool(path: String) async {
+        guard await ensureMutatingActionsAllowed(operation: "open merge tool for \(path)", relatedFilePath: path) else {
+            return
+        }
+
         let homePath = NSHomeDirectory()
         let localPath = path.hasPrefix("/") ? path : "\(homePath)/\(path)"
 

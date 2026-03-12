@@ -197,6 +197,40 @@ final class ServiceTests: XCTestCase {
         )
     }
 
+    /// Verifies parsing of git.autocommit/autopush from dump-config JSON.
+    func testParseGitAutomationConfig() throws {
+        let output = """
+        {
+          "git": {
+            "autocommit": true,
+            "autopush": false
+          }
+        }
+        """
+
+        let config = try ChezmoiService.parseGitAutomationConfig(output)
+        XCTAssertEqual(config.autoCommit, true)
+        XCTAssertEqual(config.autoPush, false)
+        XCTAssertFalse(config.isFullyEnabled)
+    }
+
+    /// Verifies invalid dump-config JSON fails with parseFailure.
+    func testParseGitAutomationConfigInvalid() {
+        let output = """
+        {
+          "git": {}
+        }
+        """
+
+        XCTAssertThrowsError(try ChezmoiService.parseGitAutomationConfig(output)) { error in
+            guard let appError = error as? AppError,
+                  case .parseFailure = appError else {
+                XCTFail("Expected parseFailure, got \(error)")
+                return
+            }
+        }
+    }
+
     // MARK: - GitService Ahead/Behind Parser Tests
 
     /// Verifies parsing of standard ahead/behind output.

@@ -9,6 +9,9 @@ struct FileListItemView: View {
     /// The file status to display.
     let file: FileStatus
 
+    /// Whether mutating actions should be disabled (view-only mode).
+    let isViewOnlyMode: Bool
+
     /// Callback invoked when the user taps the "Add" button (syncLocal action).
     let onAdd: (String) -> Void
 
@@ -74,6 +77,7 @@ struct FileListItemView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .disabled(isViewOnlyMode)
                 .toolTip(Strings.fileActions.addHint)
             }
 
@@ -83,6 +87,7 @@ struct FileListItemView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .disabled(isViewOnlyMode)
                 .toolTip(Strings.fileActions.applyHint)
             }
 
@@ -101,6 +106,7 @@ struct FileListItemView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .disabled(isViewOnlyMode)
                 .toolTip(Strings.fileActions.editHint)
             }
 
@@ -110,6 +116,7 @@ struct FileListItemView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .disabled(isViewOnlyMode)
                 .toolTip(Strings.fileActions.mergeHint)
             }
 
@@ -119,6 +126,7 @@ struct FileListItemView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .disabled(isViewOnlyMode)
                 .toolTip(Strings.fileActions.revertHint)
             }
 
@@ -128,6 +136,7 @@ struct FileListItemView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .disabled(isViewOnlyMode)
                 .foregroundStyle(.red)
                 .toolTip(Strings.fileActions.forgetHint)
             }

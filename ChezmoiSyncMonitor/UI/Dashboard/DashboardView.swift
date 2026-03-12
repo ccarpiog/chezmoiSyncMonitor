@@ -93,6 +93,12 @@ struct DashboardView: View {
                 .padding(.top, 16)
                 .padding(.bottom, 12)
 
+            if appState.isViewOnlyMode, let warning = appState.viewOnlyWarning {
+                viewOnlyBanner(warning: warning)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 10)
+            }
+
             Divider()
 
             // Overview cards
@@ -147,7 +153,7 @@ struct DashboardView: View {
                             }
                             .buttonStyle(.borderedProminent)
                             .tint(.red)
-                            .disabled(forgetConfirmationText != "FORGET")
+                            .disabled(forgetConfirmationText != "FORGET" || appState.isViewOnlyMode)
                         } // End of HStack for forget step 2 buttons
                     } // End of VStack for forget step 2 sheet content
                     .padding(24)
@@ -256,6 +262,30 @@ struct DashboardView: View {
             .disabled(isRefreshing)
         } // End of header HStack
     } // End of headerSection
+
+    /// A warning banner shown when the app enters view-only safety mode.
+    private func viewOnlyBanner(warning: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+                .padding(.top, 2)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(Strings.safety.viewOnlyTitle)
+                    .font(.callout)
+                    .fontWeight(.semibold)
+                Text(warning)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+            Spacer()
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.orange.opacity(0.12))
+        )
+    } // End of func viewOnlyBanner(warning:)
 
     /// Displays the current refresh state as text or a spinner.
     @ViewBuilder
@@ -413,6 +443,7 @@ struct DashboardView: View {
                         ForEach(filteredFiles) { file in
                             FileListItemView(
                                 file: file,
+                                isViewOnlyMode: appState.isViewOnlyMode,
                                 onAdd: { path in
                                     Task { await appState.addSingle(path: path) }
                                 },

@@ -340,6 +340,72 @@ final class ChezmoiService: ChezmoiServiceProtocol, Sendable {
         return Set(paths)
     } // End of func trackedFiles()
 
+    /// Reads `git.autocommit` and `git.autopush` from `chezmoi dump-config`.
+    ///
+    /// - Returns: Parsed git automation config flags.
+    /// - Throws: `AppError` if the command fails or the JSON cannot be parsed.
+    func gitAutomationConfig() async throws -> GitAutomationConfig {
+        let result = try await ProcessRunner.run(
+            command: chezmoiBinary,
+            arguments: ["dump-config", "--format", "json"]
+        )
+        return try Self.parseGitAutomationConfig(result.stdout)
+    } // End of func gitAutomationConfig()
+
+    /// Parses `git.autocommit`/`git.autopush` from `chezmoi dump-config` JSON.
+    ///
+    /// Exposed as an internal static method to allow unit testing.
+    /// - Parameter output: Raw JSON output from `chezmoi dump-config --format json`.
+    /// - Returns: Parsed git automation flags.
+    /// - Throws: `AppError.parseFailure` when required keys are missing or invalid.
+    static func parseGitAutomationConfig(_ output: String) throws -> GitAutomationConfig {
+        guard let data = output.data(using: .utf8) else {
+            throw AppError.parseFailure("Invalid UTF-8 while parsing chezmoi dump-config output")
+        }
+
+        let rootAny = try JSONSerialization.jsonObject(with: data, options: [])
+        guard let root = rootAny as? [String: Any] else {
+            throw AppError.parseFailure("Expected top-level JSON object in chezmoi dump-config output")
+        }
+
+        guard let gitNode = root["git"] as? [String: Any] else {
+            throw AppError.parseFailure("Missing 'git' section in chezmoi dump-config output")
+        }
+
+        guard let autoCommit = Self.parseBooleanConfigValue(gitNode["autocommit"]) else {
+            throw AppError.parseFailure("Missing or invalid 'git.autocommit' in chezmoi dump-config output")
+        }
+        guard let autoPush = Self.parseBooleanConfigValue(gitNode["autopush"]) else {
+            throw AppError.parseFailure("Missing or invalid 'git.autopush' in chezmoi dump-config output")
+        }
+
+        return GitAutomationConfig(
+            autoCommit: autoCommit,
+            autoPush: autoPush
+        )
+    } // End of static func parseGitAutomationConfig(_:)
+
+    /// Converts a loosely typed config value into a Bool when possible.
+    private static func parseBooleanConfigValue(_ value: Any?) -> Bool? {
+        if let boolValue = value as? Bool {
+            return boolValue
+        }
+        if let number = value as? NSNumber {
+            return number.boolValue
+        }
+        if let text = value as? String {
+            switch text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+            case "true", "1", "yes", "on":
+                return true
+            case "false", "0", "no", "off":
+                return false
+            default:
+                return nil
+            }
+        }
+        return nil
+    } // End of static func parseBooleanConfigValue(_:)
+
     /// Removes a file from chezmoi tracking (source state only; destination kept).
     ///
     /// The local file on disk is not deleted — only the chezmoi source-state entry

@@ -1,5 +1,19 @@
 import Foundation
 
+/// The state of chezmoi git automation settings used by mutating commands.
+struct GitAutomationConfig: Equatable, Sendable {
+    /// Whether `chezmoi` is configured to auto-commit source changes.
+    let autoCommit: Bool
+
+    /// Whether `chezmoi` is configured to auto-push source changes.
+    let autoPush: Bool
+
+    /// Whether both required automation switches are enabled.
+    var isFullyEnabled: Bool {
+        autoCommit && autoPush
+    }
+} // End of struct GitAutomationConfig
+
 /// Protocol for interacting with the chezmoi CLI.
 ///
 /// Provides methods to query file status, compute diffs, add local changes
@@ -55,6 +69,16 @@ protocol ChezmoiServiceProtocol: Sendable {
     /// - Returns: A set of relative file paths managed by chezmoi.
     /// - Throws: `AppError` if the chezmoi command fails.
     func trackedFiles() async throws -> Set<String>
+
+    /// Reads `chezmoi` git automation settings used by mutating operations.
+    ///
+    /// Required settings:
+    /// - `git.autocommit = true`
+    /// - `git.autopush = true`
+    ///
+    /// - Returns: Parsed automation flags from `chezmoi dump-config`.
+    /// - Throws: `AppError` if config cannot be read or parsed.
+    func gitAutomationConfig() async throws -> GitAutomationConfig
 
     /// Removes a file from chezmoi tracking (source state only; destination kept).
     /// - Parameter path: The relative file path to forget.

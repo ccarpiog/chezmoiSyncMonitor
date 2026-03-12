@@ -135,6 +135,15 @@
 "confirmation.forgetConfirmMismatch" = "Text does not match. Please type FORGET exactly.";
 
 /* ============================================================
+   Safety / read-only mode
+   ============================================================ */
+"safety.viewOnlyTitle" = "View-only mode";
+"safety.enabledValue" = "true";
+"safety.disabledValue" = "false";
+"safety.gitAutomationDisabled" = "Read-only mode is active because chezmoi requires git.autocommit=true and git.autopush=true. Current values: autocommit=%@, autopush=%@. Running without both can cause unexpected behaviors and sync states.";
+"safety.gitAutomationUnknown" = "Read-only mode is active because the app could not verify chezmoi git.autocommit/autopush (%@). Running without this verification can cause unexpected behaviors and sync states.";
+
+/* ============================================================
    Diff viewer
    ============================================================ */
 "diffViewer.title" = "Diff: %@";
