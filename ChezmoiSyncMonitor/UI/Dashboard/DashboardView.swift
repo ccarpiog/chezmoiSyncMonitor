@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Represents the filter options available in the file list dropdown.
 private enum FileFilter: CaseIterable {
@@ -84,6 +85,9 @@ struct DashboardView: View {
 
     /// The text the user types to confirm the forget action.
     @State private var forgetConfirmationText = ""
+
+    /// Whether a drag-and-drop operation is currently hovering over the file list.
+    @State private var isDropTargeted = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -185,11 +189,11 @@ struct DashboardView: View {
             }
         }
         .confirmationDialog(
-            Strings.dashboard.applyRemoteChanges,
+            isApplyCreation ? Strings.dashboard.createLocalFile : Strings.dashboard.applyRemoteChanges,
             isPresented: $showingApplyConfirmation,
             titleVisibility: .visible
         ) {
-            Button(Strings.dashboard.apply, role: .destructive) {
+            Button(Strings.dashboard.apply, role: isApplyCreation ? .none : .destructive) {
                 if let path = applyConfirmationPath {
                     Task {
                         await appState.updateSingle(path: path)
@@ -200,7 +204,7 @@ struct DashboardView: View {
                 applyConfirmationPath = nil
             }
         } message: {
-            Text(Strings.dashboard.applyWarning)
+            Text(isApplyCreation ? Strings.dashboard.createLocalFileMessage : Strings.dashboard.applyWarning)
         }
         .confirmationDialog(
             Strings.confirmations.revertTitle,
@@ -338,6 +342,13 @@ struct DashboardView: View {
         if case .running = appState.refreshState { return true }
         return false
     } // End of isRefreshing
+
+    /// Whether the pending apply confirmation is for a file creation (localMissing)
+    /// rather than a destructive overwrite.
+    private var isApplyCreation: Bool {
+        guard let path = applyConfirmationPath else { return false }
+        return appState.snapshot.files.first(where: { $0.path == path })?.localMissing == true
+    } // End of isApplyCreation
 
     // MARK: - Overview Cards
 
@@ -507,6 +518,35 @@ struct DashboardView: View {
                 Spacer()
             }
         } // End of GroupBox
+        .overlay {
+            if isDropTargeted && selectedFilter == .all {
+                RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [6, 3]))
+                    .foregroundStyle(.blue.opacity(0.5))
+            }
+        } // End of drop target overlay
+        .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted) { providers in
+            guard selectedFilter == .all else { return false }
+            let homeURL = FileManager.default.homeDirectoryForCurrentUser
+
+            for provider in providers {
+                _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                    guard let url = url else { return }
+                    let homePath = homeURL.path
+                    var relativePath = url.path
+                    // Strip home directory prefix to get a relative path for chezmoi
+                    if relativePath.hasPrefix(homePath + "/") {
+                        relativePath = String(relativePath.dropFirst(homePath.count + 1))
+                    } else if relativePath.hasPrefix(homePath) && relativePath.count == homePath.count {
+                        return // Dropped the home directory itself — ignore
+                    }
+                    Task { @MainActor in
+                        await appState.addSingle(path: relativePath)
+                    }
+                } // End of provider.loadObject callback
+            } // End of for loop over providers
+            return true
+        } // End of onDrop modifier
     } // End of fileListSection
 
     /// The view shown when no files match the current filter/search.
@@ -522,9 +562,21 @@ struct DashboardView: View {
                 Text(Strings.dashboard.clickRefresh)
                     .font(.caption)
                     .foregroundStyle(.tertiary)
+                if selectedFilter == .all {
+                    Text(Strings.dashboard.dropFilesHint)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .padding(.top, 4)
+                }
             } else {
                 Text(Strings.dashboard.noFilesMatchFilter)
                     .foregroundStyle(.secondary)
+                if selectedFilter == .all {
+                    Text(Strings.dashboard.dropFilesHint)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .padding(.top, 2)
+                }
                 Button(Strings.dashboard.clearFilters) {
                     selectedFilter = .needsAttention
                     searchText = ""

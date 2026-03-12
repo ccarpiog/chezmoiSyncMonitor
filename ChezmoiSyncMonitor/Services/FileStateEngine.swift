@@ -116,23 +116,15 @@ final class FileStateEngine: FileStateEngineProtocol, Sendable {
             }
 
             let hasRemoteDrift = normalizedRemotePaths.contains(file.path)
-            if hasRemoteDrift {
-                result.append(FileStatus(
-                    path: file.path,
-                    state: .dualDrift,
-                    lastModified: file.lastModified,
-                    availableActions: FileStateEngine.actions(for: .dualDrift),
-                    errorMessage: file.errorMessage
-                ))
-            } else {
-                result.append(FileStatus(
-                    path: file.path,
-                    state: .localDrift,
-                    lastModified: file.lastModified,
-                    availableActions: FileStateEngine.actions(for: .localDrift),
-                    errorMessage: file.errorMessage
-                ))
-            }
+            let newState: FileSyncState = hasRemoteDrift ? .dualDrift : .localDrift
+            result.append(FileStatus(
+                path: file.path,
+                state: newState,
+                lastModified: file.lastModified,
+                availableActions: FileStateEngine.actions(for: newState, localMissing: file.localMissing),
+                errorMessage: file.errorMessage,
+                localMissing: file.localMissing
+            ))
         } // End of loop processing local files
 
         // Add remote-only files as remoteDrift
@@ -170,17 +162,48 @@ final class FileStateEngine: FileStateEngineProtocol, Sendable {
     /// - Parameter state: The file sync state.
     /// - Returns: An array of actions available for that state.
     static func actions(for state: FileSyncState) -> [FileAction] {
+        return actions(for: state, localMissing: false)
+    } // End of static func actions(for:)
+
+    /// Returns the set of available actions for a given sync state, adjusted
+    /// when the local file is missing from disk.
+    ///
+    /// When `localMissing` is true:
+    /// - `openEditor` is removed (no local file to edit)
+    /// - `openMergeTool` is removed (nothing to merge with)
+    /// - `applyRemote` is added so the user can create the file from the tracked version
+    ///
+    /// - Parameters:
+    ///   - state: The file sync state.
+    ///   - localMissing: Whether the local destination file does not exist on disk.
+    /// - Returns: An array of actions available for that state.
+    static func actions(for state: FileSyncState, localMissing: Bool) -> [FileAction] {
+        let base: [FileAction]
         switch state {
         case .clean:
-            return [.viewDiff, .forgetFile]
+            base = [.viewDiff, .forgetFile]
         case .localDrift:
-            return [.syncLocal, .revertLocal, .viewDiff, .openEditor, .forgetFile]
+            base = [.syncLocal, .revertLocal, .viewDiff, .openEditor, .forgetFile]
         case .remoteDrift:
-            return [.applyRemote, .viewDiff, .forgetFile]
+            base = [.applyRemote, .viewDiff, .forgetFile]
         case .dualDrift:
-            return [.viewDiff, .openEditor, .openMergeTool, .forgetFile]
+            base = [.viewDiff, .openEditor, .openMergeTool, .forgetFile]
         case .error:
-            return [.viewDiff]
+            base = [.viewDiff]
+        } // End of switch state
+
+        guard localMissing else { return base }
+
+        // When local file is missing:
+        // - remove Edit/Merge (no local file to open)
+        // - remove syncLocal/revertLocal (chezmoi add/apply fails on missing source target)
+        // - add applyRemote so the user can create the file from the tracked version
+        var adjusted = base.filter {
+            $0 != .openEditor && $0 != .openMergeTool && $0 != .syncLocal && $0 != .revertLocal
         }
-    } // End of static func actions(for:)
+        if !adjusted.contains(.applyRemote) {
+            adjusted.insert(.applyRemote, at: 0)
+        }
+        return adjusted
+    } // End of static func actions(for:localMissing:)
 } // End of class FileStateEngine

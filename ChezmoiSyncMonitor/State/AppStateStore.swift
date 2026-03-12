@@ -602,9 +602,10 @@ final class AppStateStore {
 
     /// Applies remote changes for a single file.
     ///
-    /// Revalidates that the file is still in an apply-safe state (`remoteDrift`
-    /// or `dualDrift`) before executing. This prevents stale UI state from
-    /// overwriting local edits that appeared between confirmation and execution.
+    /// Revalidates that the file is still in an apply-safe state (`remoteDrift`,
+    /// `dualDrift`, or `localDrift` with `localMissing`) before executing. This
+    /// prevents stale UI state from overwriting local edits that appeared between
+    /// confirmation and execution.
     ///
     /// Pulls the source repo first (to sync remote changes locally), then
     /// applies only the specified file to the target state.
@@ -614,9 +615,12 @@ final class AppStateStore {
             return
         }
 
-        // Revalidate: ensure the file is still in an apply-safe state
+        // Revalidate: ensure the file is still in an apply-safe state.
+        // Apply is allowed for remoteDrift, dualDrift, and localDrift when localMissing
+        // (the local file doesn't exist and needs to be created from the tracked version).
         guard let currentFile = snapshot.files.first(where: { $0.path == path }),
-              currentFile.state == .remoteDrift || currentFile.state == .dualDrift else {
+              currentFile.state == .remoteDrift || currentFile.state == .dualDrift
+                || (currentFile.state == .localDrift && currentFile.localMissing) else {
             let reason = snapshot.files.first(where: { $0.path == path })?.state.displayName ?? "not found in snapshot"
             appendEvent(ActivityEvent(
                 eventType: .error,

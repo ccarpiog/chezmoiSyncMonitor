@@ -8,6 +8,7 @@
 "state.remoteDrift" = "Remote Drift";
 "state.dualDrift" = "Dual Drift";
 "state.error" = "Error";
+"state.localMissing" = "Local File Not Found";
 
 /* ============================================================
    File action labels (long form, used in models)
@@ -49,6 +50,12 @@
 "onboarding.enabled" = "Enabled";
 "onboarding.disabled" = "Disabled";
 "onboarding.sourceRepo" = "Source repo";
+"onboarding.permissions" = "Permissions";
+"onboarding.permissionsDescription" = "Grant permissions so the app can access your dotfiles and notify you of changes.";
+"onboarding.fullDiskAccess" = "Full Disk Access";
+"onboarding.fullDiskAccessDescription" = "Required to read and write dotfiles managed by other applications.";
+"onboarding.openSettings" = "Open Settings";
+"onboarding.permissionsOptional" = "These permissions are optional but recommended for full functionality.";
 
 /* ============================================================
    Navigation (common buttons)
@@ -80,6 +87,9 @@
 "dashboard.applyWarning" = "This will overwrite your local file with the remote version. This action cannot be undone.";
 "dashboard.lastRefresh" = "Last refresh: %@";
 "dashboard.version" = "Version: %@";
+"dashboard.createLocalFile" = "Create Local File";
+"dashboard.createLocalFileMessage" = "This will create the local file from the tracked version in chezmoi.";
+"dashboard.dropFilesHint" = "Drop files here to add them to chezmoi tracking";
 
 /* ============================================================
    Dashboard filters

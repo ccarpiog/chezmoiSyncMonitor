@@ -54,6 +54,11 @@ struct FileStatus: Identifiable, Sendable {
     /// An optional error message if the file is in an error state.
     let errorMessage: String?
 
+    /// Whether the local file is missing from disk (chezmoi destination status 'A').
+    /// When `true`, the file exists in the chezmoi source state but has not been
+    /// created at the destination yet.
+    let localMissing: Bool
+
     /// Creates a new FileStatus instance.
     /// - Parameters:
     ///   - path: The relative path of the file.
@@ -61,17 +66,20 @@ struct FileStatus: Identifiable, Sendable {
     ///   - lastModified: The last modification date, if known.
     ///   - availableActions: Actions available for this file.
     ///   - errorMessage: An optional error message.
+    ///   - localMissing: Whether the local file does not exist on disk.
     init(
         path: String,
         state: FileSyncState,
         lastModified: Date? = nil,
         availableActions: [FileAction] = [],
-        errorMessage: String? = nil
+        errorMessage: String? = nil,
+        localMissing: Bool = false
     ) {
         self.path = path
         self.state = state
         self.lastModified = lastModified
         self.availableActions = availableActions
         self.errorMessage = errorMessage
+        self.localMissing = localMissing
     } // End of init
 } // End of struct FileStatus

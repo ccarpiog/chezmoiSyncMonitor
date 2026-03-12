@@ -9,6 +9,17 @@ import Foundation
 /// "onboarding.welcome" key from `Localizable.strings`.
 enum Strings {
 
+    // MARK: - States
+
+    /// Display names for file sync states used as overrides in the UI.
+    enum states {
+        /// Label shown when the local file does not exist on disk.
+        static var localMissing: String {
+            String(localized: "state.localMissing",
+                   defaultValue: "Local File Not Found")
+        }
+    } // End of enum states
+
     // MARK: - Onboarding
 
     /// Strings for the onboarding wizard shown on first launch.
@@ -80,6 +91,30 @@ enum Strings {
         static var sourceRepo: String {
             String(localized: "onboarding.sourceRepo",
                    defaultValue: "Source repo")
+        }
+        static var permissions: String {
+            String(localized: "onboarding.permissions",
+                   defaultValue: "Permissions")
+        }
+        static var permissionsDescription: String {
+            String(localized: "onboarding.permissionsDescription",
+                   defaultValue: "Grant permissions so the app can access your dotfiles and notify you of changes.")
+        }
+        static var fullDiskAccess: String {
+            String(localized: "onboarding.fullDiskAccess",
+                   defaultValue: "Full Disk Access")
+        }
+        static var fullDiskAccessDescription: String {
+            String(localized: "onboarding.fullDiskAccessDescription",
+                   defaultValue: "Required to read and write dotfiles managed by other applications.")
+        }
+        static var openSettings: String {
+            String(localized: "onboarding.openSettings",
+                   defaultValue: "Open Settings")
+        }
+        static var permissionsOptional: String {
+            String(localized: "onboarding.permissionsOptional",
+                   defaultValue: "These permissions are optional but recommended for full functionality.")
         }
     } // End of enum onboarding
 
@@ -183,6 +218,18 @@ enum Strings {
         }
         static func version(_ value: String) -> String {
             String(format: NSLocalizedString("dashboard.version", value: "Version: %@", comment: ""), value)
+        }
+        static var createLocalFile: String {
+            String(localized: "dashboard.createLocalFile",
+                   defaultValue: "Create Local File")
+        }
+        static var createLocalFileMessage: String {
+            String(localized: "dashboard.createLocalFileMessage",
+                   defaultValue: "This will create the local file from the tracked version in chezmoi.")
+        }
+        static var dropFilesHint: String {
+            String(localized: "dashboard.dropFilesHint",
+                   defaultValue: "Drop files here to add them to chezmoi tracking")
         }
     } // End of enum dashboard
 

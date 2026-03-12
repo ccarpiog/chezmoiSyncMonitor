@@ -49,8 +49,8 @@ struct FileListItemView: View {
 
             Spacer()
 
-            // State label
-            Text(file.state.displayName)
+            // State label — show "Local File Not Found" when local file is missing
+            Text(file.localMissing ? Strings.states.localMissing : file.state.displayName)
                 .font(.caption)
                 .foregroundStyle(file.state.color)
                 .padding(.horizontal, 8)

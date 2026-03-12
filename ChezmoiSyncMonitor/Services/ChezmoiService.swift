@@ -87,6 +87,10 @@ final class ChezmoiService: ChezmoiServiceProtocol, Sendable {
             // Remote drift classification happens in FileStateEngine after git fetch.
             let state: FileSyncState = hasChange ? .localDrift : .clean
 
+            // When the destination status char is 'A', the local file does not
+            // exist on disk — chezmoi would need to Add (create) it.
+            let isLocalMissing = secondChar == "A"
+
             var actions: [FileAction] = [.viewDiff]
             if state == .localDrift {
                 actions.append(.syncLocal)
@@ -96,7 +100,8 @@ final class ChezmoiService: ChezmoiServiceProtocol, Sendable {
             results.append(FileStatus(
                 path: path,
                 state: state,
-                availableActions: actions
+                availableActions: actions,
+                localMissing: isLocalMissing
             ))
         } // End of loop through status output lines
 

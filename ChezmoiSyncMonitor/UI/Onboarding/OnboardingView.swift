@@ -65,7 +65,7 @@ struct OnboardingView: View {
             }
             .padding()
         }
-        .frame(width: 520, height: 420)
+        .frame(width: 520, height: 480)
     } // End of computed property body
 
     // MARK: - Step 1: Welcome
@@ -154,35 +154,80 @@ struct OnboardingView: View {
 
     // MARK: - Step 3: Permissions
 
-    /// Permissions step requesting notification authorization.
+    /// Permissions step requesting notification authorization and Full Disk Access.
     private var permissionsStep: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 16) {
             Spacer()
 
-            Image(systemName: "bell.badge.fill")
+            Image(systemName: "lock.shield.fill")
                 .font(.system(size: 48))
-                .foregroundStyle(.orange)
+                .foregroundStyle(.blue)
 
-            Text(Strings.onboarding.notifications)
+            Text(Strings.onboarding.permissions)
                 .font(.title2)
                 .fontWeight(.bold)
 
-            Text(Strings.onboarding.notificationsDescription)
+            Text(Strings.onboarding.permissionsDescription)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 40)
 
-            if notificationAuthorized {
-                Label(Strings.onboarding.notificationsEnabled, systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-            } else {
-                Button(Strings.onboarding.enableNotifications) {
-                    Task {
-                        await requestNotificationPermission()
+            // Full Disk Access section
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: "externaldrive.fill")
+                        .foregroundStyle(.blue)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(Strings.onboarding.fullDiskAccess)
+                            .fontWeight(.medium)
+                        Text(Strings.onboarding.fullDiskAccessDescription)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
-                }
-                .buttonStyle(.borderedProminent)
-            }
+                    Spacer()
+                    Button(Strings.onboarding.openSettings) {
+                        openFullDiskAccessSettings()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                } // End of HStack for Full Disk Access row
+
+                Divider()
+
+                // Notifications section
+                HStack(spacing: 8) {
+                    Image(systemName: "bell.badge.fill")
+                        .foregroundStyle(.orange)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(Strings.onboarding.notifications)
+                            .fontWeight(.medium)
+                        Text(Strings.onboarding.notificationsDescription)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if notificationAuthorized {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                    } else {
+                        Button(Strings.onboarding.enableNotifications) {
+                            Task {
+                                await requestNotificationPermission()
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+                } // End of HStack for Notifications row
+            } // End of VStack for permission rows
+            .padding()
+            .background(RoundedRectangle(cornerRadius: 8).fill(.quaternary))
+            .padding(.horizontal, 40)
+
+            Text(Strings.onboarding.permissionsOptional)
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .padding(.horizontal, 40)
 
             Spacer()
         }
@@ -374,4 +419,11 @@ struct OnboardingView: View {
             }
         }
     } // End of func requestNotificationPermission()
+
+    /// Opens System Settings to the Full Disk Access pane.
+    private func openFullDiskAccessSettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles") {
+            NSWorkspace.shared.open(url)
+        }
+    } // End of func openFullDiskAccessSettings()
 } // End of struct OnboardingView
