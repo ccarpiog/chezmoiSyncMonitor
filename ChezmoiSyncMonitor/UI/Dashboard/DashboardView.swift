@@ -349,6 +349,15 @@ struct DashboardView: View {
     private var overviewCards: some View {
         HStack(spacing: 12) {
             OverviewCardView(
+                iconName: "square.grid.2x2",
+                count: appState.snapshot.files.count,
+                label: Strings.overviewCards.all,
+                color: .blue,
+                isSelected: selectedFilter == .all,
+                action: { toggleFilter(.all) }
+            )
+
+            OverviewCardView(
                 iconName: "exclamationmark.circle.fill",
                 count: appState.snapshot.needsAttentionCount,
                 label: Strings.overviewCards.needsAttention,

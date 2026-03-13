@@ -1,5 +1,10 @@
 # Version History
 
+## 1.8.0
+
+- Hide Diff button for Clean files (identical, so diff shows nothing) and Local File Not Found files (no local file to diff against).
+- Add "All" overview card to the dashboard header, showing total managed file count. Clicking it toggles the All filter. "Needs Attention" remains the default.
+
 ## 1.7.3
 
 - Fix Diff viewer showing "No differences found" for remote-drift files. Now shows the actual git remote diff with human-readable summaries (remotely deleted, new file, modified).

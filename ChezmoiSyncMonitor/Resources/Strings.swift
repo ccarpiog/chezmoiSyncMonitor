@@ -303,6 +303,10 @@ enum Strings {
 
     /// Labels used in the overview card row on the dashboard.
     enum overviewCards {
+        static var all: String {
+            String(localized: "overview.all",
+                   defaultValue: "All")
+        }
         static var needsAttention: String {
             String(localized: "overview.needsAttention",
                    defaultValue: "Needs Attention")
