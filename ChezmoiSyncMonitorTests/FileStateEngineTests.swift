@@ -145,10 +145,10 @@ final class FileStateEngineTests: XCTestCase {
 
     // MARK: - Action Set Verification
 
-    /// Clean state actions: viewDiff, forgetFile.
+    /// Clean state actions: forgetFile only (no diff — files are identical).
     func testActionsForClean() {
         let actions = FileStateEngine.actions(for: .clean)
-        XCTAssertEqual(actions, [.viewDiff, .forgetFile])
+        XCTAssertEqual(actions, [.forgetFile])
     }
 
     /// Local drift actions: syncLocal, revertLocal, viewDiff, openEditor, forgetFile.
@@ -162,13 +162,14 @@ final class FileStateEngineTests: XCTestCase {
         XCTAssertEqual(actions.count, 5)
     }
 
-    /// Remote drift actions: applyRemote, viewDiff, forgetFile.
+    /// Remote drift actions: syncLocal, applyRemote, viewDiff, forgetFile.
     func testActionsForRemoteDrift() {
         let actions = FileStateEngine.actions(for: .remoteDrift)
+        XCTAssertTrue(actions.contains(.syncLocal))
         XCTAssertTrue(actions.contains(.applyRemote))
         XCTAssertTrue(actions.contains(.viewDiff))
         XCTAssertTrue(actions.contains(.forgetFile))
-        XCTAssertEqual(actions.count, 3)
+        XCTAssertEqual(actions.count, 4)
     }
 
     /// Dual drift actions: viewDiff, openEditor, openMergeTool, forgetFile (no syncLocal/applyRemote per PRD conflict-risk).
@@ -212,8 +213,8 @@ final class FileStateEngineTests: XCTestCase {
             [.viewDiff, .openEditor, .openMergeTool, .forgetFile]
         )
 
-        // .zshrc is remoteDrift
-        XCTAssertEqual(byPath[".zshrc"]?.availableActions, [.applyRemote, .viewDiff, .forgetFile])
+        // .zshrc is remoteDrift (syncLocal = Keep Local, applyRemote = Keep Remote)
+        XCTAssertEqual(byPath[".zshrc"]?.availableActions, [.syncLocal, .applyRemote, .viewDiff, .forgetFile])
     } // End of func testClassifiedFilesHaveCorrectActions()
 
     // MARK: - GitService Remote Changed Files Parser Tests

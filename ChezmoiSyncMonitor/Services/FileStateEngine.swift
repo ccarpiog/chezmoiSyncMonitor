@@ -129,10 +129,16 @@ final class FileStateEngine: FileStateEngineProtocol, Sendable {
 
         // Add remote-only files as remoteDrift
         for path in remoteOnlyFiles.sorted() {
+            // A remote-only file not yet in trackedFiles is new (no local copy exists).
+            // Only infer localMissing when trackedFiles is non-empty; when tracked file
+            // discovery fails, the set degrades to empty and every file would be
+            // incorrectly flagged as missing.
+            let isNewRemoteFile = !trackedFiles.isEmpty && !trackedFiles.contains(path)
             result.append(FileStatus(
                 path: path,
                 state: .remoteDrift,
-                availableActions: FileStateEngine.actions(for: .remoteDrift)
+                availableActions: FileStateEngine.actions(for: .remoteDrift, localMissing: isNewRemoteFile),
+                localMissing: isNewRemoteFile
             ))
         } // End of loop processing remote-only files
 
@@ -153,9 +159,9 @@ final class FileStateEngine: FileStateEngineProtocol, Sendable {
     /// Returns the set of available actions for a given sync state.
     ///
     /// Action derivation per state:
-    /// - `clean`: `viewDiff`, `forgetFile`
+    /// - `clean`: `forgetFile`
     /// - `localDrift`: `syncLocal`, `revertLocal`, `viewDiff`, `openEditor`, `forgetFile`
-    /// - `remoteDrift`: `applyRemote`, `viewDiff`, `forgetFile`
+    /// - `remoteDrift`: `syncLocal`, `applyRemote`, `viewDiff`, `forgetFile`
     /// - `dualDrift`: `viewDiff`, `openEditor`, `openMergeTool`, `forgetFile`
     /// - `error`: `viewDiff`
     ///
@@ -169,6 +175,7 @@ final class FileStateEngine: FileStateEngineProtocol, Sendable {
     /// when the local file is missing from disk.
     ///
     /// When `localMissing` is true:
+    /// - `viewDiff` is removed (no local file to diff against)
     /// - `openEditor` is removed (no local file to edit)
     /// - `openMergeTool` is removed (nothing to merge with)
     /// - `applyRemote` is added so the user can create the file from the tracked version
@@ -181,11 +188,11 @@ final class FileStateEngine: FileStateEngineProtocol, Sendable {
         let base: [FileAction]
         switch state {
         case .clean:
-            base = [.viewDiff, .forgetFile]
+            base = [.forgetFile]
         case .localDrift:
             base = [.syncLocal, .revertLocal, .viewDiff, .openEditor, .forgetFile]
         case .remoteDrift:
-            base = [.applyRemote, .viewDiff, .forgetFile]
+            base = [.syncLocal, .applyRemote, .viewDiff, .forgetFile]
         case .dualDrift:
             base = [.viewDiff, .openEditor, .openMergeTool, .forgetFile]
         case .error:
@@ -199,7 +206,7 @@ final class FileStateEngine: FileStateEngineProtocol, Sendable {
         // - remove syncLocal/revertLocal (chezmoi add/apply fails on missing source target)
         // - add applyRemote so the user can create the file from the tracked version
         var adjusted = base.filter {
-            $0 != .openEditor && $0 != .openMergeTool && $0 != .syncLocal && $0 != .revertLocal
+            $0 != .openEditor && $0 != .openMergeTool && $0 != .syncLocal && $0 != .revertLocal && $0 != .viewDiff
         }
         if !adjusted.contains(.applyRemote) {
             adjusted.insert(.applyRemote, at: 0)
