@@ -106,6 +106,12 @@ protocol GitServiceProtocol: Sendable {
     /// - Returns: A set of relative file paths that differ between HEAD and upstream.
     /// - Throws: `AppError` if the git command fails.
     func remoteChangedFiles() async throws -> Set<String>
+
+    /// Returns the unified diff of a specific source file between HEAD and upstream.
+    /// - Parameter sourcePath: The absolute path to the file in the chezmoi source directory.
+    /// - Returns: The diff output, or an empty string if there are no remote changes.
+    /// - Throws: `AppError` if the git command fails.
+    func remoteFileDiff(for sourcePath: String) async throws -> String
 } // End of protocol GitServiceProtocol
 
 /// Protocol for the engine that classifies file states based on local and

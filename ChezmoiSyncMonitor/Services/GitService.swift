@@ -127,6 +127,45 @@ final class GitService: GitServiceProtocol, Sendable {
         return GitService.parseRemoteChangedFiles(result.stdout)
     } // End of func remoteChangedFiles()
 
+    /// Returns the unified diff of a specific source file between HEAD and upstream.
+    ///
+    /// Computes the relative path of the file within the source directory so the
+    /// git diff command can target it precisely.
+    ///
+    /// - Parameter sourcePath: The absolute path to the file in the chezmoi source directory.
+    /// - Returns: The diff output, or an empty string if there are no remote changes.
+    /// - Throws: `AppError` if the git command fails.
+    func remoteFileDiff(for sourcePath: String) async throws -> String {
+        let sourceDir = try await sourceDirectory()
+        guard let upstreamRef = try await upstreamRef(in: sourceDir) else {
+            return ""
+        }
+
+        // Compute relative path within the source repo
+        let relativePath: String
+        if sourcePath.hasPrefix(sourceDir + "/") {
+            relativePath = String(sourcePath.dropFirst(sourceDir.count + 1))
+        } else {
+            relativePath = sourcePath
+        }
+
+        let result = try await ProcessRunner.run(
+            command: gitBinary,
+            arguments: ["-C", sourceDir, "diff", "HEAD...\(upstreamRef)", "--", relativePath],
+            throwOnFailure: false
+        )
+
+        if result.exitCode != 0 {
+            throw AppError.cliFailure(
+                command: result.command,
+                exitCode: result.exitCode,
+                stderr: result.stderr
+            )
+        }
+
+        return result.stdout
+    } // End of func remoteFileDiff(for:)
+
     /// Parses the output of `git diff --name-only` into a set of file paths.
     ///
     /// Exposed as an internal static method to allow unit testing without

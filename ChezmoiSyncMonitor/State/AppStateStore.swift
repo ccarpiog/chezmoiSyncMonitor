@@ -232,7 +232,7 @@ final class AppStateStore {
     ///
     /// Pipeline:
     /// 1. Set refreshState to .running
-    /// 2. Git fetch (if autoFetchEnabled)
+    /// 2. Git fetch (unless skipped for local mutation refresh)
     /// 3. Get chezmoi status
     /// 4. Get git ahead/behind
     /// 5. Get remote changed files (if behind > 0)
@@ -317,18 +317,14 @@ final class AppStateStore {
 
         // Step 2: Git fetch if enabled
         appendDebugRefreshEvent(Strings.diagnostics.refreshGitFetch)
-        if includeFetch && preferences.autoFetchEnabled {
+        if includeFetch {
             _ = try await gitService.fetch()
             appendDebugRefreshEvent(
                 Strings.diagnostics.refreshStepResult("git fetch completed")
             )
-        } else if !includeFetch {
-            appendDebugRefreshEvent(
-                Strings.diagnostics.refreshStepResult("git fetch skipped (local mutation refresh)")
-            )
         } else {
             appendDebugRefreshEvent(
-                Strings.diagnostics.refreshStepResult("git fetch skipped (auto-fetch disabled)")
+                Strings.diagnostics.refreshStepResult("git fetch skipped (local mutation refresh)")
             )
         }
 
@@ -1535,19 +1531,59 @@ final class AppStateStore {
     } // End of func commandDescription(command:arguments:)
 
     /// Loads the diff text for a specific file path into `currentDiff`.
+    ///
+    /// State-driven diff sourcing:
+    /// - `remoteDrift`: skips `chezmoi diff` (always empty) and goes straight to
+    ///   `git diff HEAD...@{upstream}` to show pending remote changes.
+    /// - `dualDrift`: shows both the local `chezmoi diff` and the remote git diff.
+    /// - All other states: uses `chezmoi diff` as before.
+    ///
     /// - Parameter path: The relative file path to diff.
     func loadDiff(for path: String) async {
+        let fileState = snapshot.files.first(where: { $0.path == path })?.state
+
         do {
+            // For remote-only drift, chezmoi diff compares local source vs destination
+            // which are in sync — skip it and go straight to the git remote diff.
+            if fileState == .remoteDrift {
+                let remoteDiff = try await loadRemoteDiff(for: path)
+                if let remoteDiff {
+                    currentDiff = Strings.dashboard.remoteDiffHeader + "\n\n" + formatDiffResult(remoteDiff)
+                } else {
+                    currentDiff = Strings.dashboard.noDifferences
+                }
+                return
+            } // End of remoteDrift fast path
+
             let result = try await chezmoiService.diff(for: path)
             if result.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                currentDiff = "No differences found for this file."
+                if fileState == .dualDrift {
+                    let remoteDiff = try await loadRemoteDiff(for: path)
+                    if let remoteDiff {
+                        currentDiff = Strings.dashboard.remoteDiffHeader + "\n\n" + formatDiffResult(remoteDiff)
+                    } else {
+                        currentDiff = Strings.dashboard.noDifferences
+                    }
+                } else {
+                    currentDiff = Strings.dashboard.noDifferences
+                }
             } else if result.contains("Binary files") && result.contains("differ") {
-                currentDiff = "Binary file — textual diff is not available.\n\n\(result)"
+                currentDiff = Strings.dashboard.binaryFile + "\n\n\(result)"
             } else {
-                currentDiff = result
+                // For dual drift, append the remote diff below the local diff
+                if fileState == .dualDrift {
+                    let remoteDiff = try? await loadRemoteDiff(for: path)
+                    if let remoteDiff {
+                        currentDiff = result + "\n\n" + Strings.dashboard.remoteDiffHeader + "\n\n" + formatDiffResult(remoteDiff)
+                    } else {
+                        currentDiff = result
+                    }
+                } else {
+                    currentDiff = result
+                }
             }
         } catch {
-            currentDiff = "Error loading diff: \(error.localizedDescription)"
+            currentDiff = Strings.dashboard.diffError(error.localizedDescription)
             appendEvent(ActivityEvent(
                 eventType: .error,
                 message: "Failed to load diff for \(path): \(error.localizedDescription)",
@@ -1555,6 +1591,47 @@ final class AppStateStore {
             ))
         }
     } // End of func loadDiff(for:)
+
+    /// Fetches the git diff between HEAD and upstream for a file's source path.
+    ///
+    /// Falls back gracefully if `chezmoi source-path` fails (e.g., for files that
+    /// only exist in the remote and aren't locally tracked yet).
+    ///
+    /// - Parameter path: The relative destination file path.
+    /// - Returns: The remote diff string, or `nil` if empty or unavailable.
+    private func loadRemoteDiff(for path: String) async throws -> String? {
+        do {
+            let sourcePath = try await chezmoiService.sourcePath(for: path)
+            let remoteDiff = try await gitService.remoteFileDiff(for: sourcePath)
+            let trimmed = remoteDiff.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : remoteDiff
+        } catch {
+            // source-path can fail for new remote-only files not yet in local source state
+            return nil
+        }
+    } // End of func loadRemoteDiff(for:)
+
+    /// Formats a remote diff result with a human-readable summary of the change type
+    /// (deleted, new file, modified) and binary file detection.
+    ///
+    /// - Parameter diff: The raw git diff output.
+    /// - Returns: A user-friendly string with a summary line prepended.
+    private func formatDiffResult(_ diff: String) -> String {
+        if diff.contains("Binary files") && diff.contains("differ") {
+            return Strings.dashboard.binaryFile + "\n\n\(diff)"
+        }
+
+        let summary: String
+        if diff.contains("deleted file mode") {
+            summary = Strings.dashboard.remoteDeleted
+        } else if diff.contains("new file mode") {
+            summary = Strings.dashboard.remoteNewFile
+        } else {
+            summary = Strings.dashboard.remoteModified
+        }
+
+        return summary + "\n\n" + diff
+    } // End of func formatDiffResult(_:)
 
     // MARK: - Preferences
 

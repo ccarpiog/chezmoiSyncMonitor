@@ -135,6 +135,14 @@ final class MockGitService: GitServiceProtocol, @unchecked Sendable {
     func remoteChangedFiles() async throws -> Set<String> {
         return remoteChangedFilesResult
     }
+
+    var remoteFileDiffResult: String = ""
+    var remoteFileDiffError: Error?
+
+    func remoteFileDiff(for sourcePath: String) async throws -> String {
+        if let error = remoteFileDiffError { throw error }
+        return remoteFileDiffResult
+    }
 } // End of class MockGitService
 
 /// Mock implementation of FileStateEngineProtocol for testing.
@@ -813,7 +821,6 @@ final class PreferencesStoreTests: XCTestCase {
         var prefs = AppPreferences.defaults
         prefs.pollIntervalMinutes = 10
         prefs.notificationsEnabled = false
-        prefs.autoFetchEnabled = false
         prefs.preferredEditor = "vim"
 
         prefsStore.save(prefs)
@@ -821,7 +828,6 @@ final class PreferencesStoreTests: XCTestCase {
 
         XCTAssertEqual(loaded.pollIntervalMinutes, 10)
         XCTAssertEqual(loaded.notificationsEnabled, false)
-        XCTAssertEqual(loaded.autoFetchEnabled, false)
         XCTAssertEqual(loaded.preferredEditor, "vim")
 
         defaults.removePersistentDomain(forName: suiteName)

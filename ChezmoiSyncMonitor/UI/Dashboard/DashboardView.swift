@@ -38,6 +38,14 @@ private enum FileFilter: CaseIterable {
     } // End of computed property syncState
 } // End of enum FileFilter
 
+/// Payload for the diff viewer sheet, bundling path and diff text so
+/// the sheet only opens once both are ready.
+private struct DiffPayload: Identifiable {
+    let id = UUID()
+    let filePath: String
+    let diffText: String
+} // End of struct DiffPayload
+
 /// Dashboard window showing an overview of chezmoi-managed dotfiles sync state.
 ///
 /// Displays overview cards, a filterable file list with contextual actions,
@@ -53,11 +61,8 @@ struct DashboardView: View {
     /// The search text for filtering files by path.
     @State private var searchText = ""
 
-    /// The file path currently being diffed (drives the diff sheet).
-    @State private var diffFilePath: String?
-
-    /// Whether the diff viewer sheet is presented.
-    @State private var showingDiff = false
+    /// Payload for the diff viewer sheet. Non-nil triggers presentation.
+    @State private var diffPayload: DiffPayload?
 
     /// The file path pending a destructive apply confirmation.
     @State private var applyConfirmationPath: String?
@@ -170,23 +175,8 @@ struct DashboardView: View {
                 .padding(.bottom, 16)
         } // End of outer VStack
         .frame(minWidth: 700, minHeight: 500)
-        .sheet(isPresented: $showingDiff) {
-            if let path = diffFilePath, let diff = appState.currentDiff {
-                DiffViewerView(filePath: path, diffText: diff)
-            } else {
-                VStack(spacing: 12) {
-                    Image(systemName: "doc.text.magnifyingglass")
-                        .font(.largeTitle)
-                        .foregroundStyle(.secondary)
-                    Text(Strings.dashboard.diffLoadError)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-                    Button(Strings.navigation.close) { showingDiff = false }
-                        .keyboardShortcut(.escape, modifiers: [])
-                }
-                .frame(minWidth: 400, minHeight: 200)
-            }
+        .sheet(item: $diffPayload) { payload in
+            DiffViewerView(filePath: payload.filePath, diffText: payload.diffText)
         }
         .confirmationDialog(
             isApplyCreation ? Strings.dashboard.createLocalFile : Strings.dashboard.applyRemoteChanges,
@@ -480,10 +470,11 @@ struct DashboardView: View {
                                     showingApplyConfirmation = true
                                 },
                                 onDiff: { path in
-                                    diffFilePath = path
-                                    Task {
+                                    Task { @MainActor in
                                         await appState.loadDiff(for: path)
-                                        showingDiff = true
+                                        if let diff = appState.currentDiff {
+                                            diffPayload = DiffPayload(filePath: path, diffText: diff)
+                                        }
                                     }
                                 },
                                 onEdit: { path in

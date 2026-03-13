@@ -1,5 +1,15 @@
 # Version History
 
+## 1.7.3
+
+- Fix Diff viewer showing "No differences found" for remote-drift files. Now shows the actual git remote diff with human-readable summaries (remotely deleted, new file, modified).
+- Fix race condition where Diff sheet could open before diff content was loaded, showing a generic error. Replaced dual-state sheet with single-payload `.sheet(item:)` pattern.
+- Localize all previously hardcoded diff messages (binary file, error, no differences).
+
+## 1.7.2
+
+- Remove `autoFetchEnabled` setting. Git fetch now always runs on every refresh cycle, fixing a bug where remote changes (new files, updates) were invisible when auto-fetch was disabled.
+
 ## 1.7.1
 
 - Fix "Keep Remote" (revert) failing with EOF error when chezmoi needs to overwrite a locally modified file in a non-TTY app context. Added `--force` flag to `chezmoi apply` and `chezmoi update` commands.

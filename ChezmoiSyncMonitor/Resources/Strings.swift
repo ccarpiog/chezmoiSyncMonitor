@@ -200,6 +200,33 @@ enum Strings {
             String(localized: "dashboard.diffLoadError",
                    defaultValue: "Could not load diff. The file may be binary or not managed by chezmoi.")
         }
+        static var noDifferences: String {
+            String(localized: "dashboard.noDifferences",
+                   defaultValue: "No differences found for this file.")
+        }
+        static var remoteDiffHeader: String {
+            String(localized: "dashboard.remoteDiffHeader",
+                   defaultValue: "── Remote changes (not yet pulled) ──")
+        }
+        static var binaryFile: String {
+            String(localized: "dashboard.binaryFile",
+                   defaultValue: "Binary file — textual diff is not available.")
+        }
+        static func diffError(_ detail: String) -> String {
+            String(format: NSLocalizedString("dashboard.diffError", value: "Error loading diff: %@", comment: ""), detail)
+        }
+        static var remoteDeleted: String {
+            String(localized: "dashboard.remoteDeleted",
+                   defaultValue: "⚠ This file was deleted remotely. Applying will remove it locally.")
+        }
+        static var remoteNewFile: String {
+            String(localized: "dashboard.remoteNewFile",
+                   defaultValue: "✦ This is a new file added remotely. Applying will create it locally.")
+        }
+        static var remoteModified: String {
+            String(localized: "dashboard.remoteModified",
+                   defaultValue: "This file was modified remotely.")
+        }
         static var applyRemoteChanges: String {
             String(localized: "dashboard.applyRemoteChanges",
                    defaultValue: "Apply Remote Changes")
@@ -670,10 +697,6 @@ enum Strings {
         static var behavior: String {
             String(localized: "prefs.behavior",
                    defaultValue: "Behavior")
-        }
-        static var autoFetch: String {
-            String(localized: "prefs.autoFetch",
-                   defaultValue: "Auto-fetch on refresh")
         }
         static var batchSafeSync: String {
             String(localized: "prefs.batchSafeSync",

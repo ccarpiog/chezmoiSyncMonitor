@@ -82,6 +82,13 @@
 "dashboard.noFilesMatchFilter" = "No files match the current filter.";
 "dashboard.clearFilters" = "Clear Filters";
 "dashboard.diffLoadError" = "Could not load diff. The file may be binary or not managed by chezmoi.";
+"dashboard.noDifferences" = "No differences found for this file.";
+"dashboard.remoteDiffHeader" = "── Remote changes (not yet pulled) ──";
+"dashboard.binaryFile" = "Binary file — textual diff is not available.";
+"dashboard.diffError" = "Error loading diff: %@";
+"dashboard.remoteDeleted" = "⚠ This file was deleted remotely. Applying will remove it locally.";
+"dashboard.remoteNewFile" = "✦ This is a new file added remotely. Applying will create it locally.";
+"dashboard.remoteModified" = "This file was modified remotely.";
 "dashboard.applyRemoteChanges" = "Apply Remote Changes";
 "dashboard.apply" = "Apply";
 "dashboard.createLocal" = "Create Local";
@@ -219,7 +226,6 @@
 "prefs.polling" = "Polling";
 "prefs.pollInterval" = "Poll interval:";
 "prefs.behavior" = "Behavior";
-"prefs.autoFetch" = "Auto-fetch on refresh";
 "prefs.batchSafeSync" = "Batch safe sync";
 "prefs.batchSafeSyncHelp" = "Show batch \"Apply Safe Remote\" action in the menu bar";
 "prefs.autoApplyRemote" = "Auto-apply remote changes";

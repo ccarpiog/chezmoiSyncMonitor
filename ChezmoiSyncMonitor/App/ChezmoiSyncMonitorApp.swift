@@ -245,4 +245,9 @@ private struct StubGitService: GitServiceProtocol {
     func remoteChangedFiles() async throws -> Set<String> {
         throw AppError.unknown("git binary not found. Configure the path in Preferences.")
     }
+
+    /// Always throws an error indicating git is not configured.
+    func remoteFileDiff(for sourcePath: String) async throws -> String {
+        throw AppError.unknown("git binary not found. Configure the path in Preferences.")
+    }
 } // End of struct StubGitService
