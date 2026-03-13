@@ -683,6 +683,14 @@ enum Strings {
             String(localized: "prefs.batchSafeSyncHelp",
                    defaultValue: "Show batch \"Apply Safe Remote\" action in the menu bar")
         }
+        static var autoApplyRemote: String {
+            String(localized: "prefs.autoApplyRemote",
+                   defaultValue: "Auto-apply remote changes")
+        }
+        static var autoApplyRemoteHelp: String {
+            String(localized: "prefs.autoApplyRemoteHelp",
+                   defaultValue: "Automatically apply remote-only changes after each refresh. Conflicts (dual drift) are never auto-applied.")
+        }
         static var notifications: String {
             String(localized: "prefs.notifications",
                    defaultValue: "Notifications")
@@ -817,6 +825,28 @@ enum Strings {
         static var pathChangeRequiresRestart: String {
             String(localized: "prefs.pathChangeRequiresRestart",
                    defaultValue: "Path changes take effect after restarting the app.")
+        }
+
+        // Config sync
+        static var configSync: String {
+            String(localized: "prefs.configSync",
+                   defaultValue: "Configuration Sync")
+        }
+        static var addConfigToChezmoi: String {
+            String(localized: "prefs.addConfigToChezmoi",
+                   defaultValue: "Add Config to Chezmoi")
+        }
+        static var configTracked: String {
+            String(localized: "prefs.configTracked",
+                   defaultValue: "Config file is tracked by chezmoi and synced across machines.")
+        }
+        static var configNotTracked: String {
+            String(localized: "prefs.configNotTracked",
+                   defaultValue: "Config file is not tracked. Add it to sync preferences across machines.")
+        }
+        static var configCheckingStatus: String {
+            String(localized: "prefs.configCheckingStatus",
+                   defaultValue: "Checking tracking status...")
         }
 
         // Poll interval labels

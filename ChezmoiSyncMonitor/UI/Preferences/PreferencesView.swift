@@ -31,6 +31,9 @@ struct PreferencesView: View {
     /// Optional error message from the most recent login-item action.
     @State private var loginItemErrorMessage: String?
 
+    /// Whether the app's config file is tracked by chezmoi. `nil` while checking.
+    @State private var configFileTracked: Bool?
+
     /// Common poll interval values for the Picker.
     private static let pollIntervalValues: [Int] = [1, 2, 5, 10, 15, 30, 60, 0]
 
@@ -58,13 +61,16 @@ struct PreferencesView: View {
                     Label(Strings.prefs.advancedTab, systemImage: "gearshape.2")
                 }
         }
-        .frame(width: 480, height: 380)
+        .frame(width: 480, height: 440)
         .onAppear {
             prefs = appState.preferences
             detectedChezmoiPath = PATHResolver.chezmoiPath()
             detectedGitPath = PATHResolver.gitPath()
             detectSourceRepoPath()
             refreshLoginItemStatus()
+            Task {
+                configFileTracked = await appState.isConfigFileTracked()
+            }
         }
     } // End of computed property body
 
@@ -105,6 +111,15 @@ struct PreferencesView: View {
                     }
                 ))
                 .help(Strings.prefs.batchSafeSyncHelp)
+
+                Toggle(Strings.prefs.autoApplyRemote, isOn: Binding(
+                    get: { prefs.autoApplyRemoteEnabled },
+                    set: { newValue in
+                        prefs.autoApplyRemoteEnabled = newValue
+                        savePreferences()
+                    }
+                ))
+                .help(Strings.prefs.autoApplyRemoteHelp)
             }
 
             Section(Strings.prefs.notifications) {
@@ -278,6 +293,31 @@ struct PreferencesView: View {
                     }
                 ))
                 .help(Strings.prefs.verboseDiagnosticsHelp)
+            }
+
+            Section(Strings.prefs.configSync) {
+                if let tracked = configFileTracked {
+                    if tracked {
+                        Text(Strings.prefs.configTracked)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text(Strings.prefs.configNotTracked)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        Button(Strings.prefs.addConfigToChezmoi) {
+                            Task {
+                                await appState.addConfigToChezmoi()
+                                configFileTracked = await appState.isConfigFileTracked()
+                            }
+                        }
+                    }
+                } else {
+                    Text(Strings.prefs.configCheckingStatus)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section(Strings.prefs.reset) {

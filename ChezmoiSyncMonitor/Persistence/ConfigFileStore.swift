@@ -53,6 +53,7 @@ final class ConfigFileStore: Sendable {
         var chezmoiPathOverride: String?
         var gitPathOverride: String?
         var sourceRepoPathOverride: String?
+        var autoApplyRemoteEnabled: Bool
 
         /// Creates a `CrossMachineConfig` from a full `AppPreferences`, extracting only cross-machine fields.
         /// - Parameter prefs: The full preferences to extract from.
@@ -67,6 +68,7 @@ final class ConfigFileStore: Sendable {
             self.chezmoiPathOverride = prefs.chezmoiPathOverride
             self.gitPathOverride = prefs.gitPathOverride
             self.sourceRepoPathOverride = prefs.sourceRepoPathOverride
+            self.autoApplyRemoteEnabled = prefs.autoApplyRemoteEnabled
         } // End of init(from:)
 
         /// Default cross-machine config values.
@@ -154,6 +156,7 @@ final class ConfigFileStore: Sendable {
         merged.chezmoiPathOverride = config.chezmoiPathOverride
         merged.gitPathOverride = config.gitPathOverride
         merged.sourceRepoPathOverride = config.sourceRepoPathOverride
+        merged.autoApplyRemoteEnabled = config.autoApplyRemoteEnabled
         return merged
     } // End of func merge(_:into:)
 

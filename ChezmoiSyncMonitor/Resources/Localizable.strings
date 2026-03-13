@@ -222,6 +222,8 @@
 "prefs.autoFetch" = "Auto-fetch on refresh";
 "prefs.batchSafeSync" = "Batch safe sync";
 "prefs.batchSafeSyncHelp" = "Show batch \"Apply Safe Remote\" action in the menu bar";
+"prefs.autoApplyRemote" = "Auto-apply remote changes";
+"prefs.autoApplyRemoteHelp" = "Automatically apply remote-only changes after each refresh. Conflicts (dual drift) are never auto-applied.";
 "prefs.notifications" = "Notifications";
 "prefs.enableNotifications" = "Enable notifications";
 "prefs.chezmoi" = "Chezmoi";
@@ -256,6 +258,11 @@
 "prefs.detected" = "Detected: %@";
 "prefs.startupError" = "Last startup toggle error: %@";
 "prefs.pathChangeRequiresRestart" = "Path changes take effect after restarting the app.";
+"prefs.configSync" = "Configuration Sync";
+"prefs.addConfigToChezmoi" = "Add Config to Chezmoi";
+"prefs.configTracked" = "Config file is tracked by chezmoi and synced across machines.";
+"prefs.configNotTracked" = "Config file is not tracked. Add it to sync preferences across machines.";
+"prefs.configCheckingStatus" = "Checking tracking status...";
 
 /* ============================================================
    External tool picker

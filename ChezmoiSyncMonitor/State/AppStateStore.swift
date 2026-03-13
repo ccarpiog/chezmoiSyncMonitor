@@ -303,8 +303,11 @@ final class AppStateStore {
     /// Executes the core refresh pipeline steps.
     ///
     /// Separated from `performRefresh` to allow wrapping with a timeout task.
+    /// - Parameters:
+    ///   - includeFetch: Whether to run `git fetch` in this refresh.
+    ///   - isPostAutoApply: When `true`, skips auto-apply to prevent infinite recursion.
     /// - Throws: `AppError` if any CLI command fails, or `CancellationError` if timed out.
-    private func executeRefreshPipeline(includeFetch: Bool = true) async throws {
+    private func executeRefreshPipeline(includeFetch: Bool = true, isPostAutoApply: Bool = false) async throws {
         appendDebugRefreshEvent(Strings.diagnostics.refreshValidateAutomation)
         await refreshMutationMode(logTransition: true)
 
@@ -449,6 +452,51 @@ final class AppStateStore {
         // Step 9b: Notify user of drift via system notifications
         await notificationService?.notifyDrift(snapshot: snapshot)
         appendDebugRefreshEvent(Strings.diagnostics.refreshComplete)
+
+        // Step 10: Auto-apply remote changes if enabled
+        if !isPostAutoApply && preferences.autoApplyRemoteEnabled && !isViewOnlyMode {
+            let remoteFiles = snapshot.files.filter { $0.state == .remoteDrift }
+            if !remoteFiles.isEmpty {
+                appendEvent(ActivityEvent(
+                    eventType: .update,
+                    message: "Auto-applying \(remoteFiles.count) remote change(s)"
+                ))
+
+                do {
+                    _ = try await chezmoiService.pullSource()
+                } catch {
+                    appendEvent(ActivityEvent(
+                        eventType: .error,
+                        message: "Auto-apply: failed to pull source: \(error.localizedDescription)"
+                    ))
+                    return
+                }
+
+                var succeeded = 0
+                var failed = 0
+                for file in remoteFiles {
+                    do {
+                        _ = try await chezmoiService.apply(path: file.path)
+                        succeeded += 1
+                    } catch {
+                        failed += 1
+                        appendEvent(ActivityEvent(
+                            eventType: .error,
+                            message: "Auto-apply failed for \(file.path): \(error.localizedDescription)",
+                            relatedFilePath: file.path
+                        ))
+                    }
+                } // End of loop auto-applying remote files
+
+                appendEvent(ActivityEvent(
+                    eventType: .update,
+                    message: "Auto-apply complete: \(succeeded) succeeded, \(failed) failed"
+                ))
+
+                // Re-run pipeline to update the snapshot (no fetch, no auto-apply)
+                try await executeRefreshPipeline(includeFetch: false, isPostAutoApply: true)
+            }
+        }
     } // End of func executeRefreshPipeline()
 
     /// Appends a verbose refresh diagnostic event when diagnostics are enabled.
@@ -1211,6 +1259,55 @@ final class AppStateStore {
             ))
         }
     } // End of func commitAndPush()
+
+    // MARK: - Config file management
+
+    /// Checks whether the app's config file is tracked by chezmoi.
+    ///
+    /// Compares the config file path against the set of tracked files.
+    /// - Returns: `true` if `~/.config/chezmoiSyncMonitor/config.json` is tracked.
+    func isConfigFileTracked() async -> Bool {
+        do {
+            let tracked = try await chezmoiService.trackedFiles()
+            return tracked.contains(configFileRelativePath)
+        } catch {
+            return false
+        }
+    } // End of func isConfigFileTracked()
+
+    /// Adds the app's config file to chezmoi tracking.
+    ///
+    /// Uses `chezmoi add` to start tracking `~/.config/chezmoiSyncMonitor/config.json`.
+    /// With `git.autocommit` and `git.autopush` enabled, the file will be committed
+    /// and pushed automatically by chezmoi.
+    func addConfigToChezmoi() async {
+        guard await ensureMutatingActionsAllowed(operation: "add config to chezmoi") else {
+            return
+        }
+
+        let path = configFileRelativePath
+
+        do {
+            _ = try await chezmoiService.add(path: path)
+            appendEvent(ActivityEvent(
+                eventType: .add,
+                message: "Added app config file to chezmoi tracking",
+                relatedFilePath: path
+            ))
+            await forceRefresh(includeFetch: false)
+        } catch {
+            appendEvent(ActivityEvent(
+                eventType: .error,
+                message: "Failed to add config file to chezmoi: \(error.localizedDescription)",
+                relatedFilePath: path
+            ))
+        }
+    } // End of func addConfigToChezmoi()
+
+    /// The relative path (from home) to the app's config file.
+    private var configFileRelativePath: String {
+        ".config/chezmoiSyncMonitor/config.json"
+    } // End of configFileRelativePath
 
     /// Opens a file in the user's preferred editor.
     ///

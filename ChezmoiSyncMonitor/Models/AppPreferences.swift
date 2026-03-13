@@ -38,6 +38,10 @@ struct AppPreferences: Codable, Sendable, Equatable {
     /// An optional override for the chezmoi source repository path.
     var sourceRepoPathOverride: String?
 
+    /// Whether remote-only changes should be applied automatically after each refresh.
+    /// When enabled, files classified as `remoteDrift` are applied without user interaction.
+    var autoApplyRemoteEnabled: Bool = false
+
     /// Whether verbose diagnostics should be logged in Activity Log at runtime.
     /// In Debug builds diagnostics are always enabled regardless of this value.
     var verboseDiagnosticsEnabled: Bool = false
@@ -55,6 +59,7 @@ struct AppPreferences: Codable, Sendable, Equatable {
         chezmoiPathOverride: nil,
         gitPathOverride: nil,
         sourceRepoPathOverride: nil,
+        autoApplyRemoteEnabled: false,
         verboseDiagnosticsEnabled: false
     )
 } // End of struct AppPreferences
