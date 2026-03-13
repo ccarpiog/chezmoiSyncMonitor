@@ -223,6 +223,10 @@ enum Strings {
             String(localized: "dashboard.remoteNewFile",
                    defaultValue: "✦ This is a new file added remotely. Applying will create it locally.")
         }
+        static var remoteNewFileLocalExists: String {
+            String(localized: "dashboard.remoteNewFileLocalExists",
+                   defaultValue: "✦ This file was added to chezmoi tracking remotely. Applying will overwrite your local copy with the tracked version.")
+        }
         static var remoteModified: String {
             String(localized: "dashboard.remoteModified",
                    defaultValue: "This file was modified remotely.")

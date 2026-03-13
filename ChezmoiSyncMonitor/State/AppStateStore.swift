@@ -1548,7 +1548,7 @@ final class AppStateStore {
             if fileState == .remoteDrift {
                 let remoteDiff = try await loadRemoteDiff(for: path)
                 if let remoteDiff {
-                    currentDiff = Strings.dashboard.remoteDiffHeader + "\n\n" + formatDiffResult(remoteDiff)
+                    currentDiff = Strings.dashboard.remoteDiffHeader + "\n\n" + formatDiffResult(remoteDiff, targetPath: path)
                 } else {
                     currentDiff = Strings.dashboard.noDifferences
                 }
@@ -1560,7 +1560,7 @@ final class AppStateStore {
                 if fileState == .dualDrift {
                     let remoteDiff = try await loadRemoteDiff(for: path)
                     if let remoteDiff {
-                        currentDiff = Strings.dashboard.remoteDiffHeader + "\n\n" + formatDiffResult(remoteDiff)
+                        currentDiff = Strings.dashboard.remoteDiffHeader + "\n\n" + formatDiffResult(remoteDiff, targetPath: path)
                     } else {
                         currentDiff = Strings.dashboard.noDifferences
                     }
@@ -1574,7 +1574,7 @@ final class AppStateStore {
                 if fileState == .dualDrift {
                     let remoteDiff = try? await loadRemoteDiff(for: path)
                     if let remoteDiff {
-                        currentDiff = result + "\n\n" + Strings.dashboard.remoteDiffHeader + "\n\n" + formatDiffResult(remoteDiff)
+                        currentDiff = result + "\n\n" + Strings.dashboard.remoteDiffHeader + "\n\n" + formatDiffResult(remoteDiff, targetPath: path)
                     } else {
                         currentDiff = result
                     }
@@ -1614,9 +1614,11 @@ final class AppStateStore {
     /// Formats a remote diff result with a human-readable summary of the change type
     /// (deleted, new file, modified) and binary file detection.
     ///
-    /// - Parameter diff: The raw git diff output.
+    /// - Parameters:
+    ///   - diff: The raw git diff output.
+    ///   - targetPath: The destination file path (relative to home) used to check local existence.
     /// - Returns: A user-friendly string with a summary line prepended.
-    private func formatDiffResult(_ diff: String) -> String {
+    private func formatDiffResult(_ diff: String, targetPath: String) -> String {
         if diff.contains("Binary files") && diff.contains("differ") {
             return Strings.dashboard.binaryFile + "\n\n\(diff)"
         }
@@ -1625,13 +1627,19 @@ final class AppStateStore {
         if diff.contains("deleted file mode") {
             summary = Strings.dashboard.remoteDeleted
         } else if diff.contains("new file mode") {
-            summary = Strings.dashboard.remoteNewFile
+            let homePath = FileManager.default.homeDirectoryForCurrentUser.path
+            let fullPath = (homePath as NSString).appendingPathComponent(targetPath)
+            if FileManager.default.fileExists(atPath: fullPath) {
+                summary = Strings.dashboard.remoteNewFileLocalExists
+            } else {
+                summary = Strings.dashboard.remoteNewFile
+            }
         } else {
             summary = Strings.dashboard.remoteModified
         }
 
         return summary + "\n\n" + diff
-    } // End of func formatDiffResult(_:)
+    } // End of func formatDiffResult(_:targetPath:)
 
     // MARK: - Preferences
 

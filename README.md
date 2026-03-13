@@ -56,7 +56,7 @@ Chezmoi Sync Monitor supports syncing most app preferences through chezmoi itsel
   - `~/.config/chezmoiSyncMonitor/config.json`
 - Machine-local settings stay in `UserDefaults` and are not synced.
 
-Cross-machine settings include poll interval, notifications, auto-fetch, batch mode, tool path overrides, source repo path override, and preferred editor/merge tool.
+Cross-machine settings include poll interval, notifications, batch mode, tool path overrides, source repo path override, and preferred editor/merge tool.
 
 Machine-local settings include:
 

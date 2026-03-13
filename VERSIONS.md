@@ -1,5 +1,9 @@
 # Version History
 
+## 1.8.1
+
+- Fix misleading "Applying will create it locally" message for files added to chezmoi tracking remotely that already exist on the local disk. The diff viewer now checks whether the local target file exists and shows an accurate message ("Applying will overwrite your local copy with the tracked version") instead.
+
 ## 1.8.0
 
 - Hide Diff button for Clean files (identical, so diff shows nothing) and Local File Not Found files (no local file to diff against).

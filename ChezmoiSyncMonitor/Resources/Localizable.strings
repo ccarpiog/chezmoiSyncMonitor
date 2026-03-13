@@ -88,6 +88,7 @@
 "dashboard.diffError" = "Error loading diff: %@";
 "dashboard.remoteDeleted" = "⚠ This file was deleted remotely. Applying will remove it locally.";
 "dashboard.remoteNewFile" = "✦ This is a new file added remotely. Applying will create it locally.";
+"dashboard.remoteNewFileLocalExists" = "✦ This file was added to chezmoi tracking remotely. Applying will overwrite your local copy with the tracked version.";
 "dashboard.remoteModified" = "This file was modified remotely.";
 "dashboard.applyRemoteChanges" = "Apply Remote Changes";
 "dashboard.apply" = "Apply";
