@@ -9,6 +9,12 @@ import os
 @main
 struct ChezmoiSyncMonitorApp: App {
 
+    /// The app delegate that handles notification tap events.
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+
+    /// Environment action to open windows by identifier.
+    @Environment(\.openWindow) private var openWindow
+
     /// Logger for app-level events.
     private static let logger = Logger(
         subsystem: "cc.carpio.ChezmoiSyncMonitor",
@@ -29,6 +35,9 @@ struct ChezmoiSyncMonitorApp: App {
             isOnline: appState.isOnline
         )
     }
+
+    /// The global keyboard shortcut service, if a shortcut is registered.
+    @State private var shortcutService: GlobalShortcutService?
 
     /// Tracks whether services have been started.
     @State private var servicesStarted = false
@@ -85,9 +94,20 @@ struct ChezmoiSyncMonitorApp: App {
         } label: {
             Image(nsImage: statusIcon.image)
                 .accessibilityLabel(Text(Strings.app.accessibilityLabel))
+                .onReceive(NotificationCenter.default.publisher(for: .openDashboard)) { _ in
+                    openWindow(id: "dashboard")
+                    NSApplication.shared.activate(ignoringOtherApps: true)
+                }
                 .task {
                     guard !servicesStarted else { return }
                     servicesStarted = true
+
+                    // Handle cold-launch notification tap that fired before .onReceive subscribed
+                    if appDelegate.pendingDashboardOpen {
+                        appDelegate.pendingDashboardOpen = false
+                        openWindow(id: "dashboard")
+                        NSApplication.shared.activate(ignoringOtherApps: true)
+                    }
 
                     // If initialization failed, set the error state immediately
                     if let errorMsg = initError {
@@ -103,6 +123,12 @@ struct ChezmoiSyncMonitorApp: App {
                     }
 
                     await appState.startServices()
+
+                    // Register saved global shortcut if configured
+                    registerDashboardShortcut()
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .dashboardShortcutChanged)) { _ in
+                    registerDashboardShortcut()
                 }
         }
         .menuBarExtraStyle(.window)
@@ -120,6 +146,27 @@ struct ChezmoiSyncMonitorApp: App {
             PreferencesView(appState: appState)
         }
     } // End of computed property body
+
+    /// Registers or re-registers the global dashboard shortcut from saved preferences.
+    ///
+    /// Unregisters any existing shortcut first, then attempts to register the new one.
+    /// If no shortcut is configured, simply clears the service.
+    private func registerDashboardShortcut() {
+        shortcutService?.unregister()
+        shortcutService = nil
+
+        guard let shortcut = appState.preferences.dashboardShortcut else { return }
+
+        let service = GlobalShortcutService {
+            NotificationCenter.default.post(name: .openDashboard, object: nil)
+        }
+
+        if service.register(shortcut: shortcut) {
+            shortcutService = service
+        } else {
+            Self.logger.warning("Failed to register dashboard shortcut: \(shortcut.displayString)")
+        }
+    } // End of func registerDashboardShortcut()
 } // End of struct ChezmoiSyncMonitorApp
 
 // MARK: - Stub services for graceful degradation

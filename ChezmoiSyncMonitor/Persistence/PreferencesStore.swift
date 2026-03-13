@@ -59,6 +59,14 @@ struct PreferencesStore: Sendable {
         defaults.set(prefs.gitPathOverride, forKey: key("gitPathOverride"))
         defaults.set(prefs.sourceRepoPathOverride, forKey: key("sourceRepoPathOverride"))
         defaults.set(prefs.verboseDiagnosticsEnabled, forKey: key("verboseDiagnosticsEnabled"))
+
+        // Persist per-machine keyboard shortcut as JSON data
+        if let shortcut = prefs.dashboardShortcut,
+           let data = try? JSONEncoder().encode(shortcut) {
+            defaults.set(data, forKey: key("dashboardShortcut"))
+        } else {
+            defaults.removeObject(forKey: key("dashboardShortcut"))
+        }
     } // End of func save(_:)
 
     /// Loads preferences using the dual-source priority: config file > UserDefaults > hardcoded defaults.
@@ -84,6 +92,12 @@ struct PreferencesStore: Sendable {
             verboseDiagnosticsEnabled = AppPreferences.defaults.verboseDiagnosticsEnabled
         }
 
+        // Per-machine: keyboard shortcut (JSON-encoded)
+        var dashboardShortcut: KeyboardShortcutModel?
+        if let data = defaults.data(forKey: key("dashboardShortcut")) {
+            dashboardShortcut = try? JSONDecoder().decode(KeyboardShortcutModel.self, from: data)
+        }
+
         // Try loading cross-machine settings from config file first
         if let configFilePrefs = configFileStore.load() {
             let merged = configFileStore.merge(configFilePrefs, into: AppPreferences(
@@ -98,7 +112,8 @@ struct PreferencesStore: Sendable {
                 chezmoiPathOverride: configFilePrefs.chezmoiPathOverride,
                 gitPathOverride: configFilePrefs.gitPathOverride,
                 sourceRepoPathOverride: configFilePrefs.sourceRepoPathOverride,
-                verboseDiagnosticsEnabled: verboseDiagnosticsEnabled
+                verboseDiagnosticsEnabled: verboseDiagnosticsEnabled,
+                dashboardShortcut: dashboardShortcut
             ))
             return merged
         }
@@ -118,7 +133,8 @@ struct PreferencesStore: Sendable {
                 chezmoiPathOverride: AppPreferences.defaults.chezmoiPathOverride,
                 gitPathOverride: AppPreferences.defaults.gitPathOverride,
                 sourceRepoPathOverride: AppPreferences.defaults.sourceRepoPathOverride,
-                verboseDiagnosticsEnabled: verboseDiagnosticsEnabled
+                verboseDiagnosticsEnabled: verboseDiagnosticsEnabled,
+                dashboardShortcut: dashboardShortcut
             )
         }
 
@@ -134,7 +150,8 @@ struct PreferencesStore: Sendable {
             chezmoiPathOverride: defaults.string(forKey: key("chezmoiPathOverride")),
             gitPathOverride: defaults.string(forKey: key("gitPathOverride")),
             sourceRepoPathOverride: defaults.string(forKey: key("sourceRepoPathOverride")),
-            verboseDiagnosticsEnabled: verboseDiagnosticsEnabled
+            verboseDiagnosticsEnabled: verboseDiagnosticsEnabled,
+            dashboardShortcut: dashboardShortcut
         )
     } // End of func load()
 
@@ -158,7 +175,7 @@ struct PreferencesStore: Sendable {
             "autoFetchEnabled", "batchSafeSyncEnabled", "launchAtLogin",
             "preferredMergeTool", "preferredEditor", "chezmoiPathOverride",
             "gitPathOverride", "sourceRepoPathOverride", "verboseDiagnosticsEnabled",
-            "hasCompletedOnboarding"
+            "dashboardShortcut", "hasCompletedOnboarding"
         ]
         for k in allKeys {
             defaults.removeObject(forKey: key(k))

@@ -34,6 +34,9 @@ struct PreferencesView: View {
     /// Whether the app's config file is tracked by chezmoi. `nil` while checking.
     @State private var configFileTracked: Bool?
 
+    /// Whether the shortcut registration failed for the last recorded shortcut.
+    @State private var shortcutRegistrationFailed = false
+
     /// Common poll interval values for the Picker.
     private static let pollIntervalValues: [Int] = [1, 2, 5, 10, 15, 30, 60, 0]
 
@@ -282,6 +285,30 @@ struct PreferencesView: View {
                 ))
 
                 loginItemStatusView
+            }
+
+            Section(Strings.prefs.keyboardShortcut) {
+                ShortcutRecorderView(
+                    shortcut: Binding(
+                        get: { prefs.dashboardShortcut },
+                        set: { newValue in
+                            prefs.dashboardShortcut = newValue
+                            savePreferences()
+                        }
+                    ),
+                    onShortcutChanged: { newShortcut in
+                        prefs.dashboardShortcut = newShortcut
+                        savePreferences()
+                        // Post notification so the app can re-register the shortcut
+                        NotificationCenter.default.post(
+                            name: .dashboardShortcutChanged,
+                            object: nil
+                        )
+                    }
+                )
+                Text(Strings.prefs.keyboardShortcutHelp)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section(Strings.prefs.diagnostics) {

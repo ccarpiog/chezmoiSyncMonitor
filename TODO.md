@@ -1,4 +1,5 @@
-- [x] Add option in Settings to easily add own configuration file to chezmoi. Give an additional option to automatically apply remote changes if detected, without user interaction.
-  - Added "Configuration Sync" section in Settings > Advanced tab with a button to add the app's config file (~/.config/chezmoiSyncMonitor/config.json) to chezmoi tracking.
-  - Added "Auto-apply remote changes" toggle in Settings > Sync > Behavior. When enabled, remote-only changes are applied automatically after each refresh cycle. Conflicts (dual drift) are never auto-applied. Uses a re-entry guard (isPostAutoApply) to prevent infinite refresh loops.
-  - Version bumped to 1.6.0.
+- [x] Clicking on the notification should open the dashboard.
+  - Done in v1.7.0: AppDelegate handles UNUserNotificationCenterDelegate, posts .openDashboard on tap. Cold-launch buffering included.
+
+- [x] Allow setting a global keyboard shortcut to open the dashboard.
+  - Done in v1.7.0: Carbon RegisterEventHotKey API with recorder UI in Settings > Advanced. Conflict detection for system shortcuts, registration failure feedback. Persisted per-machine in UserDefaults.

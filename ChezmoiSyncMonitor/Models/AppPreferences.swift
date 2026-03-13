@@ -46,6 +46,10 @@ struct AppPreferences: Codable, Sendable, Equatable {
     /// In Debug builds diagnostics are always enabled regardless of this value.
     var verboseDiagnosticsEnabled: Bool = false
 
+    /// The global keyboard shortcut for opening the dashboard, or `nil` if not set.
+    /// This is a per-machine setting stored as a Carbon key code and modifier flags.
+    var dashboardShortcut: KeyboardShortcutModel?
+
     /// Default preferences with sensible initial values.
     static let defaults = AppPreferences(
         schemaVersion: 1,
@@ -60,6 +64,7 @@ struct AppPreferences: Codable, Sendable, Equatable {
         gitPathOverride: nil,
         sourceRepoPathOverride: nil,
         autoApplyRemoteEnabled: false,
-        verboseDiagnosticsEnabled: false
+        verboseDiagnosticsEnabled: false,
+        dashboardShortcut: nil
     )
 } // End of struct AppPreferences

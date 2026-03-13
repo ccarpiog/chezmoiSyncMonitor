@@ -1,5 +1,14 @@
 # Version History
 
+## 1.7.0
+
+- Clicking a system notification now opens the dashboard window and brings the app to the foreground.
+- Notifications are now shown as banners even when the app is in the foreground.
+- Added global keyboard shortcut support for opening the dashboard from anywhere in the system.
+- New "Dashboard Shortcut" section in Settings > Advanced lets users record, clear, and change the shortcut.
+- Conflict detection warns when the chosen shortcut matches well-known macOS system shortcuts (Cmd+Q, Cmd+Tab, Cmd+Space, etc.).
+- Registration failure feedback when the shortcut is already taken by another application.
+
 ## 1.6.0
 
 - Added auto-apply remote changes option in Settings > Sync > Behavior. When enabled, remote-only changes (no conflicts) are applied automatically after each refresh without user interaction.

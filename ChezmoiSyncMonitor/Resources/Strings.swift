@@ -849,6 +849,44 @@ enum Strings {
                    defaultValue: "Checking tracking status...")
         }
 
+        // Keyboard shortcut
+        static var keyboardShortcut: String {
+            String(localized: "prefs.keyboardShortcut",
+                   defaultValue: "Dashboard Shortcut")
+        }
+        static var keyboardShortcutHelp: String {
+            String(localized: "prefs.keyboardShortcutHelp",
+                   defaultValue: "Set a global keyboard shortcut to open the dashboard from anywhere.")
+        }
+        static var shortcutNotSet: String {
+            String(localized: "prefs.shortcutNotSet",
+                   defaultValue: "Not set")
+        }
+        static var shortcutRecord: String {
+            String(localized: "prefs.shortcutRecord",
+                   defaultValue: "Record Shortcut")
+        }
+        static var shortcutRecording: String {
+            String(localized: "prefs.shortcutRecording",
+                   defaultValue: "Press shortcut...")
+        }
+        static var shortcutStop: String {
+            String(localized: "prefs.shortcutStop",
+                   defaultValue: "Cancel")
+        }
+        static var shortcutClear: String {
+            String(localized: "prefs.shortcutClear",
+                   defaultValue: "Clear")
+        }
+        static var shortcutConflictWarning: String {
+            String(localized: "prefs.shortcutConflictWarning",
+                   defaultValue: "This shortcut may conflict with a system or common application shortcut.")
+        }
+        static var shortcutRegistrationFailed: String {
+            String(localized: "prefs.shortcutRegistrationFailed",
+                   defaultValue: "Could not register this shortcut. It may already be in use by another application.")
+        }
+
         // Poll interval labels
         static var manualOnly: String {
             String(localized: "prefs.manualOnly",

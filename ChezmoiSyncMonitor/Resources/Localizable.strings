@@ -265,6 +265,19 @@
 "prefs.configCheckingStatus" = "Checking tracking status...";
 
 /* ============================================================
+   Keyboard shortcut
+   ============================================================ */
+"prefs.keyboardShortcut" = "Dashboard Shortcut";
+"prefs.keyboardShortcutHelp" = "Set a global keyboard shortcut to open the dashboard from anywhere.";
+"prefs.shortcutNotSet" = "Not set";
+"prefs.shortcutRecord" = "Record Shortcut";
+"prefs.shortcutRecording" = "Press shortcut...";
+"prefs.shortcutStop" = "Cancel";
+"prefs.shortcutClear" = "Clear";
+"prefs.shortcutConflictWarning" = "This shortcut may conflict with a system or common application shortcut.";
+"prefs.shortcutRegistrationFailed" = "Could not register this shortcut. It may already be in use by another application.";
+
+/* ============================================================
    External tool picker
    ============================================================ */
 "toolPicker.command" = "Command...";

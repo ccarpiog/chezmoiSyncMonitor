@@ -212,7 +212,11 @@ final class AppStateStore {
         // Validate mutation safety mode once on startup before the first user action.
         await refreshMutationMode(logTransition: true)
 
-        await watcherService?.start()
+        // Start watcher without awaiting — the initial refresh runs in the background
+        // so the main actor is freed for UI tasks (e.g., preferences config check).
+        Task { [weak self] in
+            await self?.watcherService?.start()
+        }
     } // End of func startServices()
 
     /// Stops all background services. Called on deinit.
