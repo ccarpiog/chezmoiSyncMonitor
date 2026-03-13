@@ -1,5 +1,9 @@
 # Version History
 
+## 1.7.1
+
+- Fix "Keep Remote" (revert) failing with EOF error when chezmoi needs to overwrite a locally modified file in a non-TTY app context. Added `--force` flag to `chezmoi apply` and `chezmoi update` commands.
+
 ## 1.7.0
 
 - Clicking a system notification now opens the dashboard window and brings the app to the foreground.

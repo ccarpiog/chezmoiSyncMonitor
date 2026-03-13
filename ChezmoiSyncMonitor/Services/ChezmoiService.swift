@@ -138,12 +138,15 @@ final class ChezmoiService: ChezmoiServiceProtocol, Sendable {
 
     /// Applies remote changes from the source state to the local machine.
     ///
+    /// Uses `--force` to suppress interactive prompts that would fail with EOF
+    /// in a non-TTY macOS app context.
+    ///
     /// - Returns: The `CommandResult` of the update command.
     /// - Throws: `AppError` if the chezmoi command fails.
     func update() async throws -> CommandResult {
         return try await ProcessRunner.run(
             command: chezmoiBinary,
-            arguments: ["update", "--no-tty"]
+            arguments: ["update", "--no-tty", "--force"]
         )
     } // End of func update()
 
@@ -282,6 +285,8 @@ final class ChezmoiService: ChezmoiServiceProtocol, Sendable {
     /// Applies the chezmoi source state for a single file to the local machine.
     ///
     /// Does NOT pull from remote — call `pullSource()` first for remoteDrift files.
+    /// Uses `--force` to suppress interactive prompts that would fail with EOF
+    /// in a non-TTY macOS app context.
     ///
     /// - Parameter path: The relative file path to apply.
     /// - Returns: The `CommandResult` of the apply command.
@@ -290,7 +295,7 @@ final class ChezmoiService: ChezmoiServiceProtocol, Sendable {
         let resolvedPath = Self.resolveChezmoiTargetPath(path)
         return try await ProcessRunner.run(
             command: chezmoiBinary,
-            arguments: ["apply", "--no-tty", "--", resolvedPath]
+            arguments: ["apply", "--no-tty", "--force", "--", resolvedPath]
         )
     } // End of func apply(path:)
 
