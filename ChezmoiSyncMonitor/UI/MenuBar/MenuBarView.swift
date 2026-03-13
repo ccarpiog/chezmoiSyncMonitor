@@ -91,6 +91,11 @@ struct MenuBarView: View {
                 Strings.menu.quit,
                 icon: "power"
             ) {
+                // Close all windows first to dismiss any modal sheets that
+                // would block NSApplication.terminate.
+                for window in NSApplication.shared.windows {
+                    window.close()
+                }
                 NSApplication.shared.terminate(nil)
             }
         }
