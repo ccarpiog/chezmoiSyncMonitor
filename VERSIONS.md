@@ -1,5 +1,23 @@
 # Version History
 
+## 2.1.0
+
+- Multi-select mode for bulk bundle assignment: toggle via the checkbox button in the filter bar, select individual files with checkboxes, then assign all selected files to a bundle at once. Includes "Select All" and "Clear Selection" controls.
+- Drag-and-drop file assignment: drag file rows from the unbundled list onto bundle rows in the left pane to assign them. Bundles highlight with a visual drop indicator when targeted. Multiple files can be dragged at once.
+- New batch `assignFilesToBundle(paths:bundleId:)` method for efficient multi-file assignment in a single save operation.
+
+## 2.0.0
+
+- New Bundles feature: group tracked files into named bundles for organizational purposes. Bundles sync across machines via the cross-machine config file.
+- Two-pane dashboard layout with HSplitView: left pane shows unbundled files and bundle rows, right pane shows selected bundle's members.
+- Bundle CRUD: create, rename, and delete bundles from the dashboard filter bar or detail pane header.
+- File assignment via context menu: "Assign to Bundle" submenu on file rows, "Remove from Bundle" for bundled files, "New Bundle..." to create and assign in one step.
+- One-bundle-per-file constraint enforced at the store level.
+- Bundle rows display aggregate worst-member state color, member count, and compact colored capsule tags per non-clean state.
+- Search and filter integration: search text filters both unbundled files and bundle members; bundles with zero matching members are hidden. All dashboard filters (Needs Attention, All, specific states) apply consistently to bundles.
+- Stale membership cleanup: bundle members referencing files no longer tracked by chezmoi are automatically pruned during the refresh pipeline (only when tracked files load successfully).
+- Bundle data persisted in CrossMachineConfig with backward-compatible decoding (missing `bundles` key defaults to `[]`). UserDefaults caches bundles as fallback.
+
 ## 1.8.1
 
 - Fix misleading "Applying will create it locally" message for files added to chezmoi tracking remotely that already exist on the local disk. The diff viewer now checks whether the local target file exists and shows an accurate message ("Applying will overwrite your local copy with the tracked version") instead.

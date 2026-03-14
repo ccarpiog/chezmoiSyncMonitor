@@ -347,8 +347,10 @@ final class AppStateStore {
         // Step 3b: Get chezmoi tracked files (degrade gracefully on failure)
         appendDebugRefreshEvent(Strings.diagnostics.refreshTrackedFiles)
         var trackedFiles: Set<String> = []
+        var trackedFilesLoadedSuccessfully = false
         do {
             trackedFiles = try await chezmoiService.trackedFiles()
+            trackedFilesLoadedSuccessfully = true
             appendDebugRefreshEvent(
                 Strings.diagnostics.refreshStepResult("tracked files loaded: \(trackedFiles.count)")
             )
@@ -435,6 +437,13 @@ final class AppStateStore {
             lastRefreshAt: now,
             files: classifiedFiles
         )
+
+        // Prune bundle members that are no longer tracked.
+        // Only prune when tracked files loaded successfully,
+        // otherwise drift-only mode would incorrectly remove valid members.
+        if trackedFilesLoadedSuccessfully {
+            pruneStaleBundleMembers()
+        }
 
         // Step 8: Set success state
         refreshState = .success(now)
@@ -1196,13 +1205,12 @@ final class AppStateStore {
         do {
             _ = try await chezmoiService.pullSource()
         } catch {
+            // Pull failure is non-fatal for forget — log a warning and proceed
             appendEvent(ActivityEvent(
                 eventType: .error,
-                message: "Failed to pull source before forgetting \(path): \(error.localizedDescription)",
+                message: "Pull before forget failed (proceeding anyway): \(error.localizedDescription)",
                 relatedFilePath: path
             ))
-            await forceRefresh()
-            return
         }
 
         do {
@@ -1793,4 +1801,167 @@ final class AppStateStore {
 
         return "Refresh complete: \(parts.joined(separator: ", "))"
     } // End of func buildRefreshSummary(from:)
+
+    // MARK: - Bundle Management
+
+    /// Creates a new bundle with the given name.
+    /// - Parameter name: The bundle name (must be non-empty and unique, case-insensitive).
+    /// - Returns: The created bundle, or nil if validation failed.
+    @discardableResult
+    func createBundle(name: String) -> BundleDefinition? {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let lowered = trimmed.lowercased()
+        guard !preferences.bundles.contains(where: { $0.name.lowercased() == lowered }) else { return nil }
+        let bundle = BundleDefinition(id: UUID(), name: trimmed, memberPaths: [])
+        preferences.bundles.append(bundle)
+        savePreferences()
+        return bundle
+    } // End of func createBundle(name:)
+
+    /// Renames an existing bundle.
+    /// - Parameters:
+    ///   - id: The bundle's UUID.
+    ///   - newName: The new name (must be non-empty and unique, case-insensitive).
+    /// - Returns: True if the rename succeeded.
+    @discardableResult
+    func renameBundle(id: UUID, newName: String) -> Bool {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        let lowered = trimmed.lowercased()
+        guard !preferences.bundles.contains(where: { $0.id != id && $0.name.lowercased() == lowered }) else { return false }
+        guard let index = preferences.bundles.firstIndex(where: { $0.id == id }) else { return false }
+        preferences.bundles[index].name = trimmed
+        savePreferences()
+        return true
+    } // End of func renameBundle(id:newName:)
+
+    /// Deletes a bundle. Does NOT affect underlying files.
+    /// - Parameter id: The bundle's UUID.
+    func deleteBundle(id: UUID) {
+        preferences.bundles.removeAll { $0.id == id }
+        savePreferences()
+    }
+
+    /// Assigns multiple files to a bundle at once, removing each from any other bundle first.
+    /// - Parameters:
+    ///   - paths: The file paths to assign.
+    ///   - bundleId: The target bundle's UUID.
+    func assignFilesToBundle(paths: [String], bundleId: UUID) {
+        guard !paths.isEmpty else { return }
+        guard preferences.bundles.contains(where: { $0.id == bundleId }) else { return }
+        let pathSet = Set(paths)
+        // Remove from all existing bundles
+        for i in preferences.bundles.indices {
+            preferences.bundles[i].memberPaths.removeAll { pathSet.contains($0) }
+        }
+        // Add to target bundle
+        if let index = preferences.bundles.firstIndex(where: { $0.id == bundleId }) {
+            let existing = Set(preferences.bundles[index].memberPaths)
+            for path in paths where !existing.contains(path) {
+                preferences.bundles[index].memberPaths.append(path)
+            }
+        }
+        savePreferences()
+    } // End of func assignFilesToBundle(paths:bundleId:)
+
+    /// Assigns a file to a bundle, removing it from any other bundle first (one-bundle-per-file constraint).
+    /// - Parameters:
+    ///   - path: The file path to assign.
+    ///   - bundleId: The target bundle's UUID.
+    func assignFileToBundle(path: String, bundleId: UUID) {
+        // Validate target bundle exists before mutating
+        guard preferences.bundles.contains(where: { $0.id == bundleId }) else { return }
+        // Remove from any existing bundle
+        for i in preferences.bundles.indices {
+            preferences.bundles[i].memberPaths.removeAll { $0 == path }
+        }
+        // Add to target bundle
+        if let index = preferences.bundles.firstIndex(where: { $0.id == bundleId }) {
+            if !preferences.bundles[index].memberPaths.contains(path) {
+                preferences.bundles[index].memberPaths.append(path)
+            }
+        }
+        savePreferences()
+    } // End of func assignFileToBundle(path:bundleId:)
+
+    /// Removes a file from a bundle. Does NOT untrack it from chezmoi.
+    /// - Parameters:
+    ///   - path: The file path to remove.
+    ///   - bundleId: The bundle's UUID.
+    func removeFileFromBundle(path: String, bundleId: UUID) {
+        if let index = preferences.bundles.firstIndex(where: { $0.id == bundleId }) {
+            preferences.bundles[index].memberPaths.removeAll { $0 == path }
+        }
+        savePreferences()
+    }
+
+    /// Returns the bundle a file belongs to, or nil if unbundled.
+    /// - Parameter path: The file path to look up.
+    /// - Returns: The bundle containing this file, or nil.
+    func bundleFor(path: String) -> BundleDefinition? {
+        return preferences.bundles.first { $0.memberPaths.contains(path) }
+    }
+
+    /// Returns files from the snapshot that are not assigned to any bundle.
+    /// - Parameter snapshot: The sync snapshot to filter.
+    /// - Returns: Unbundled file statuses.
+    func unbundledFiles(from snapshot: SyncSnapshot) -> [FileStatus] {
+        let allBundledPaths = Set(preferences.bundles.flatMap(\.memberPaths))
+        return snapshot.files.filter { !allBundledPaths.contains($0.path) }
+    }
+
+    /// Resolves a bundle's member paths to FileStatus objects from the current snapshot.
+    /// - Parameters:
+    ///   - bundleId: The bundle's UUID.
+    ///   - snapshot: The sync snapshot to look up files in.
+    /// - Returns: FileStatus objects for member paths that exist in the snapshot.
+    func bundleMembers(bundleId: UUID, from snapshot: SyncSnapshot) -> [FileStatus] {
+        guard let bundle = preferences.bundles.first(where: { $0.id == bundleId }) else { return [] }
+        let pathSet = Set(bundle.memberPaths)
+        return snapshot.files.filter { pathSet.contains($0.path) }
+    } // End of func bundleMembers(bundleId:from:)
+
+    /// Returns the worst (highest precedence) state among a bundle's members.
+    /// - Parameter bundleId: The bundle's UUID.
+    /// - Returns: The aggregate state, or `.clean` if the bundle is empty or not found.
+    func bundleAggregateState(bundleId: UUID) -> FileSyncState {
+        let members = bundleMembers(bundleId: bundleId, from: snapshot)
+        return members.map(\.state).max() ?? .clean
+    }
+
+    /// Returns a count of each sync state among a bundle's members.
+    /// - Parameter bundleId: The bundle's UUID.
+    /// - Returns: A dictionary mapping each present state to its count.
+    func bundleStateCounts(bundleId: UUID) -> [FileSyncState: Int] {
+        let members = bundleMembers(bundleId: bundleId, from: snapshot)
+        var counts: [FileSyncState: Int] = [:]
+        for member in members {
+            counts[member.state, default: 0] += 1
+        }
+        return counts
+    } // End of func bundleStateCounts(bundleId:)
+
+    /// Removes bundle member paths that no longer appear in the current snapshot's tracked files.
+    /// Logs pruned paths to the activity log.
+    private func pruneStaleBundleMembers() {
+        let currentPaths = Set(snapshot.files.map(\.path))
+        var didPrune = false
+        for i in preferences.bundles.indices {
+            let stale = preferences.bundles[i].memberPaths.filter { !currentPaths.contains($0) }
+            if !stale.isEmpty {
+                for path in stale {
+                    appendEvent(ActivityEvent(
+                        eventType: .refresh,
+                        message: "Pruned stale bundle member '\(path)' from bundle '\(preferences.bundles[i].name)'"
+                    ))
+                } // End of loop through stale paths
+                preferences.bundles[i].memberPaths.removeAll { !currentPaths.contains($0) }
+                didPrune = true
+            }
+        } // End of loop through bundles
+        if didPrune {
+            savePreferences()
+        }
+    } // End of func pruneStaleBundleMembers()
 } // End of class AppStateStore

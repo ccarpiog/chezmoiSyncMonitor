@@ -1,9 +1,11 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// A reusable row view for displaying a single file's sync status and available actions.
 ///
 /// Shows a status color indicator, file path, state label, and contextual action
-/// buttons based on the file's available actions.
+/// buttons based on the file's available actions. Supports optional selection
+/// mode for bulk bundle assignment and drag-and-drop.
 struct FileListItemView: View {
 
     /// The file status to display.
@@ -11,6 +13,15 @@ struct FileListItemView: View {
 
     /// Whether mutating actions should be disabled (view-only mode).
     let isViewOnlyMode: Bool
+
+    /// Whether multi-select mode is active (shows checkboxes).
+    var isSelectable: Bool = false
+
+    /// Whether this file row is currently selected (multi-select mode).
+    var isSelected: Bool = false
+
+    /// Callback invoked when the user toggles selection on this file.
+    var onToggleSelection: ((String) -> Void)?
 
     /// Callback invoked when the user taps the "Add" button (syncLocal action).
     let onAdd: (String) -> Void
@@ -35,6 +46,16 @@ struct FileListItemView: View {
 
     var body: some View {
         HStack(spacing: 10) {
+            // Selection checkbox (only in multi-select mode)
+            if isSelectable {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                    .font(.body)
+                    .onTapGesture {
+                        onToggleSelection?(file.path)
+                    }
+            }
+
             // Status color indicator
             Circle()
                 .fill(file.state.color)
@@ -65,6 +86,12 @@ struct FileListItemView: View {
         } // End of HStack for file row
         .padding(.vertical, 4)
         .padding(.horizontal, 8)
+        .background(
+            isSelected ? Color.accentColor.opacity(0.08) : Color.clear
+        )
+        .onDrag {
+            NSItemProvider(object: file.path as NSString)
+        }
     } // End of body
 
     /// Builds the action buttons based on the file's available actions.

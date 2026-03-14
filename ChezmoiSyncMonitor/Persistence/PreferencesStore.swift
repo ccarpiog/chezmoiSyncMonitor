@@ -66,6 +66,11 @@ struct PreferencesStore: Sendable {
         } else {
             defaults.removeObject(forKey: key("dashboardShortcut"))
         }
+
+        // Cache bundles in UserDefaults as JSON data (fallback if config file is unavailable)
+        if let data = try? JSONEncoder().encode(prefs.bundles) {
+            defaults.set(data, forKey: key("bundles"))
+        }
     } // End of func save(_:)
 
     /// Loads preferences using the dual-source priority: config file > UserDefaults > hardcoded defaults.
@@ -111,9 +116,16 @@ struct PreferencesStore: Sendable {
                 gitPathOverride: configFilePrefs.gitPathOverride,
                 sourceRepoPathOverride: configFilePrefs.sourceRepoPathOverride,
                 verboseDiagnosticsEnabled: verboseDiagnosticsEnabled,
-                dashboardShortcut: dashboardShortcut
+                dashboardShortcut: dashboardShortcut,
+                bundles: configFilePrefs.bundles
             ))
             return merged
+        }
+
+        // Restore bundles from UserDefaults cache (used in fallback paths below)
+        var cachedBundles: [BundleDefinition] = []
+        if let data = defaults.data(forKey: key("bundles")) {
+            cachedBundles = (try? JSONDecoder().decode([BundleDefinition].self, from: data)) ?? []
         }
 
         // Fall back to UserDefaults
@@ -131,7 +143,8 @@ struct PreferencesStore: Sendable {
                 gitPathOverride: AppPreferences.defaults.gitPathOverride,
                 sourceRepoPathOverride: AppPreferences.defaults.sourceRepoPathOverride,
                 verboseDiagnosticsEnabled: verboseDiagnosticsEnabled,
-                dashboardShortcut: dashboardShortcut
+                dashboardShortcut: dashboardShortcut,
+                bundles: cachedBundles
             )
         }
 
@@ -147,7 +160,8 @@ struct PreferencesStore: Sendable {
             gitPathOverride: defaults.string(forKey: key("gitPathOverride")),
             sourceRepoPathOverride: defaults.string(forKey: key("sourceRepoPathOverride")),
             verboseDiagnosticsEnabled: verboseDiagnosticsEnabled,
-            dashboardShortcut: dashboardShortcut
+            dashboardShortcut: dashboardShortcut,
+            bundles: cachedBundles
         )
     } // End of func load()
 
@@ -171,7 +185,7 @@ struct PreferencesStore: Sendable {
             "batchSafeSyncEnabled", "launchAtLogin",
             "preferredMergeTool", "preferredEditor", "chezmoiPathOverride",
             "gitPathOverride", "sourceRepoPathOverride", "verboseDiagnosticsEnabled",
-            "dashboardShortcut", "hasCompletedOnboarding"
+            "dashboardShortcut", "hasCompletedOnboarding", "bundles"
         ]
         for k in allKeys {
             defaults.removeObject(forKey: key(k))

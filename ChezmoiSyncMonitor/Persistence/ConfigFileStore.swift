@@ -53,6 +53,33 @@ final class ConfigFileStore: Sendable {
         var gitPathOverride: String?
         var sourceRepoPathOverride: String?
         var autoApplyRemoteEnabled: Bool
+        var bundles: [BundleDefinition]
+
+        /// Coding keys for JSON serialization.
+        enum CodingKeys: String, CodingKey {
+            case schemaVersion, pollIntervalMinutes, notificationsEnabled
+            case batchSafeSyncEnabled, preferredMergeTool, preferredEditor
+            case chezmoiPathOverride, gitPathOverride, sourceRepoPathOverride
+            case autoApplyRemoteEnabled, bundles
+        } // End of enum CodingKeys
+
+        /// Custom decoder that uses `decodeIfPresent` for fields added after v1,
+        /// ensuring backward compatibility with older config files.
+        /// - Parameter decoder: The decoder to read data from.
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+            pollIntervalMinutes = try container.decode(Int.self, forKey: .pollIntervalMinutes)
+            notificationsEnabled = try container.decode(Bool.self, forKey: .notificationsEnabled)
+            batchSafeSyncEnabled = try container.decode(Bool.self, forKey: .batchSafeSyncEnabled)
+            preferredMergeTool = try container.decodeIfPresent(String.self, forKey: .preferredMergeTool)
+            preferredEditor = try container.decodeIfPresent(String.self, forKey: .preferredEditor)
+            chezmoiPathOverride = try container.decodeIfPresent(String.self, forKey: .chezmoiPathOverride)
+            gitPathOverride = try container.decodeIfPresent(String.self, forKey: .gitPathOverride)
+            sourceRepoPathOverride = try container.decodeIfPresent(String.self, forKey: .sourceRepoPathOverride)
+            autoApplyRemoteEnabled = try container.decodeIfPresent(Bool.self, forKey: .autoApplyRemoteEnabled) ?? false
+            bundles = try container.decodeIfPresent([BundleDefinition].self, forKey: .bundles) ?? []
+        } // End of init(from decoder:)
 
         /// Creates a `CrossMachineConfig` from a full `AppPreferences`, extracting only cross-machine fields.
         /// - Parameter prefs: The full preferences to extract from.
@@ -67,7 +94,8 @@ final class ConfigFileStore: Sendable {
             self.gitPathOverride = prefs.gitPathOverride
             self.sourceRepoPathOverride = prefs.sourceRepoPathOverride
             self.autoApplyRemoteEnabled = prefs.autoApplyRemoteEnabled
-        } // End of init(from:)
+            self.bundles = prefs.bundles
+        } // End of init(from prefs:)
 
         /// Default cross-machine config values.
         static let defaults = CrossMachineConfig(from: .defaults)
@@ -154,6 +182,7 @@ final class ConfigFileStore: Sendable {
         merged.gitPathOverride = config.gitPathOverride
         merged.sourceRepoPathOverride = config.sourceRepoPathOverride
         merged.autoApplyRemoteEnabled = config.autoApplyRemoteEnabled
+        merged.bundles = config.bundles
         return merged
     } // End of func merge(_:into:)
 

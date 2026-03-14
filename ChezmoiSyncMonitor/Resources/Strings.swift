@@ -1010,4 +1010,105 @@ enum Strings {
                    defaultValue: "unknown")
         }
     } // End of enum app
+
+    // MARK: - Bundles
+
+    /// Strings for the bundles feature (grouping tracked files).
+    enum bundles {
+        // Bundle management
+        static var newBundle: String {
+            String(localized: "bundles.newBundle",
+                   defaultValue: "New Bundle")
+        }
+        static var renameBundle: String {
+            String(localized: "bundles.renameBundle",
+                   defaultValue: "Rename Bundle")
+        }
+        static var deleteBundle: String {
+            String(localized: "bundles.deleteBundle",
+                   defaultValue: "Delete Bundle")
+        }
+        static var bundleName: String {
+            String(localized: "bundles.bundleName",
+                   defaultValue: "Bundle Name")
+        }
+        static var bundleNamePlaceholder: String {
+            String(localized: "bundles.bundleNamePlaceholder",
+                   defaultValue: "Enter bundle name...")
+        }
+        static var manageBundles: String {
+            String(localized: "bundles.manageBundles",
+                   defaultValue: "Manage Bundles")
+        }
+
+        // Assignment
+        static var assignToBundle: String {
+            String(localized: "bundles.assignToBundle",
+                   defaultValue: "Assign to Bundle")
+        }
+        static var removeFromBundle: String {
+            String(localized: "bundles.removeFromBundle",
+                   defaultValue: "Remove from Bundle")
+        }
+        static var unbundled: String {
+            String(localized: "bundles.unbundled",
+                   defaultValue: "Unbundled")
+        }
+
+        // Detail pane
+        static var selectBundleHint: String {
+            String(localized: "bundles.selectBundleHint",
+                   defaultValue: "Select a bundle to see its files")
+        }
+        /// Returns the hint showing how many files are hidden by the current filter.
+        static func filesHiddenByFilter(_ count: Int) -> String {
+            String(format: NSLocalizedString("bundles.filesHiddenByFilter", value: "%d file(s) hidden by filter", comment: ""), count)
+        }
+        static var noMembers: String {
+            String(localized: "bundles.noMembers",
+                   defaultValue: "This bundle has no files")
+        }
+        static var allMembersFiltered: String {
+            String(localized: "bundles.allMembersFiltered",
+                   defaultValue: "All files in this bundle are hidden by the current filter")
+        }
+
+        // Confirmation dialogs
+        static var deleteBundleTitle: String {
+            String(localized: "bundles.deleteBundleTitle",
+                   defaultValue: "Delete this bundle?")
+        }
+        static var deleteBundleMessage: String {
+            String(localized: "bundles.deleteBundleMessage",
+                   defaultValue: "The bundle will be removed but the files will remain tracked by chezmoi.")
+        }
+        static var deleteBundleButton: String {
+            String(localized: "bundles.deleteBundleButton",
+                   defaultValue: "Delete Bundle")
+        }
+
+        // Member count
+        /// Returns a localized member count label.
+        static func memberCount(_ count: Int) -> String {
+            String(format: NSLocalizedString("bundles.memberCount", value: "%d file(s)", comment: ""), count)
+        }
+
+        // Multi-select
+        /// Returns a label showing how many files are selected.
+        static func selectionCount(_ count: Int) -> String {
+            String(format: NSLocalizedString("bundles.selectionCount", value: "%d selected", comment: ""), count)
+        }
+        static var assignSelected: String {
+            String(localized: "bundles.assignSelected",
+                   defaultValue: "Assign Selected to Bundle")
+        }
+        static var clearSelection: String {
+            String(localized: "bundles.clearSelection",
+                   defaultValue: "Clear Selection")
+        }
+        static var selectAll: String {
+            String(localized: "bundles.selectAll",
+                   defaultValue: "Select All")
+        }
+    } // End of enum bundles
 } // End of enum Strings

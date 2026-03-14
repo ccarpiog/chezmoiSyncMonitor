@@ -312,3 +312,28 @@
    ============================================================ */
 "app.accessibilityLabel" = "Chezmoi Sync Monitor";
 "app.unknownVersion" = "unknown";
+
+/* ============================================================
+   Bundles
+   ============================================================ */
+"bundles.newBundle" = "New Bundle";
+"bundles.renameBundle" = "Rename Bundle";
+"bundles.deleteBundle" = "Delete Bundle";
+"bundles.bundleName" = "Bundle Name";
+"bundles.bundleNamePlaceholder" = "Enter bundle name...";
+"bundles.manageBundles" = "Manage Bundles";
+"bundles.assignToBundle" = "Assign to Bundle";
+"bundles.removeFromBundle" = "Remove from Bundle";
+"bundles.unbundled" = "Unbundled";
+"bundles.selectBundleHint" = "Select a bundle to see its files";
+"bundles.filesHiddenByFilter" = "%d file(s) hidden by filter";
+"bundles.noMembers" = "This bundle has no files";
+"bundles.allMembersFiltered" = "All files in this bundle are hidden by the current filter";
+"bundles.deleteBundleTitle" = "Delete this bundle?";
+"bundles.deleteBundleMessage" = "The bundle will be removed but the files will remain tracked by chezmoi.";
+"bundles.deleteBundleButton" = "Delete Bundle";
+"bundles.memberCount" = "%d file(s)";
+"bundles.selectionCount" = "%d selected";
+"bundles.assignSelected" = "Assign Selected to Bundle";
+"bundles.clearSelection" = "Clear Selection";
+"bundles.selectAll" = "Select All";

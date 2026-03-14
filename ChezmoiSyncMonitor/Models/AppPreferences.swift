@@ -47,6 +47,10 @@ struct AppPreferences: Codable, Sendable, Equatable {
     /// This is a per-machine setting stored as a Carbon key code and modifier flags.
     var dashboardShortcut: KeyboardShortcutModel?
 
+    /// Named groups of tracked files for organizational purposes.
+    /// Cross-machine setting stored in the config file.
+    var bundles: [BundleDefinition] = []
+
     /// Default preferences with sensible initial values.
     static let defaults = AppPreferences(
         schemaVersion: 1,
@@ -61,6 +65,7 @@ struct AppPreferences: Codable, Sendable, Equatable {
         sourceRepoPathOverride: nil,
         autoApplyRemoteEnabled: false,
         verboseDiagnosticsEnabled: false,
-        dashboardShortcut: nil
+        dashboardShortcut: nil,
+        bundles: []
     )
 } // End of struct AppPreferences
