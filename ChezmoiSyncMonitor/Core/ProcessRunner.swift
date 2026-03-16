@@ -32,6 +32,18 @@ enum ProcessRunner: Sendable {
         process.executableURL = URL(fileURLWithPath: command)
         process.arguments = arguments
 
+        // Prevent commands from blocking on stdin in this non-interactive app.
+        // Without this, any command that tries to read input (git credential
+        // prompts, editor invocations, chezmoi confirmations) would hang.
+        process.standardInput = FileHandle.nullDevice
+
+        // Suppress interactive git prompts (credentials, editors) so they
+        // fail fast instead of hanging in a non-TTY context.
+        var env = ProcessInfo.processInfo.environment
+        env["GIT_TERMINAL_PROMPT"] = "0"
+        env["GIT_EDITOR"] = "true"
+        process.environment = env
+
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
         process.standardOutput = stdoutPipe

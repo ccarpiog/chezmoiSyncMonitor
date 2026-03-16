@@ -1,5 +1,9 @@
 # Version History
 
+## 2.1.5
+
+- Fix commands hanging in the non-interactive menu bar app context. Set `standardInput` to null device and suppress git interactive prompts (`GIT_TERMINAL_PROMPT=0`, `GIT_EDITOR=true`) so commands fail fast instead of blocking on stdin.
+
 ## 2.1.4
 
 - Fix Apply Remote failing for the specific file that causes a source repo conflict. After rebase fails, the app now tries `rebase --skip` to accept the remote version of the conflicting auto-commit before giving up. This resolves the underlying divergence instead of just working around it.
