@@ -232,7 +232,18 @@ final class ChezmoiService: ChezmoiServiceProtocol, Sendable {
                 return .success(rebaseResult)
             }
 
-            // Rebase also failed — abort it so the repo stays clean.
+            // Rebase failed on a conflicting local commit. Try skipping it
+            // (accepts remote version for that commit). This is safe in chezmoi
+            // source repos where local commits are typically auto-generated.
+            let skipResult = try await runSourceGit(
+                arguments: ["rebase", "--skip"],
+                throwOnFailure: false
+            )
+            if skipResult.exitCode == 0 {
+                return .success(skipResult)
+            }
+
+            // Skip also failed — abort the whole rebase so the repo stays clean.
             // Return .conflict so callers can decide whether to proceed.
             _ = try await runSourceGit(
                 arguments: ["rebase", "--abort"],

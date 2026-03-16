@@ -1,5 +1,9 @@
 # Version History
 
+## 2.1.4
+
+- Fix Apply Remote failing for the specific file that causes a source repo conflict. After rebase fails, the app now tries `rebase --skip` to accept the remote version of the conflicting auto-commit before giving up. This resolves the underlying divergence instead of just working around it.
+
 ## 2.1.3
 
 - Fix pull conflicts in one file blocking all actions for all other files. `pullSource()` now returns a structured outcome: content conflicts are treated as recoverable (file-scoped actions proceed with a warning using local source state) while only `commitAndPush` hard-stops on unresolved conflicts. The source repo is always left in a clean state after failed merge/rebase attempts.
