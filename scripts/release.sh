@@ -40,28 +40,13 @@ for cmd in xcodebuild xcrun hdiutil ditto; do
   fi
 done
 
-IDENTITIES_OUTPUT="$(security find-identity -v -p codesigning 2>&1 || true)"
-MATCHING_IDENTITY="$(
-  echo "$IDENTITIES_OUTPUT" | awk \
-    -v cert="$DEVELOPER_ID_APP_CERT" \
-    -v team="($TEAM_ID)" \
-    'index($0, cert) && index($0, team) { print; exit }'
-)"
-
-if [[ -z "$MATCHING_IDENTITY" ]]; then
-  echo "Missing signing identity: '$DEVELOPER_ID_APP_CERT' for team '$TEAM_ID'." >&2
-  echo >&2
-  echo "Expected to find a certificate like:" >&2
-  echo "  $DEVELOPER_ID_APP_CERT: <Your Name> ($TEAM_ID)" >&2
-  echo >&2
-  echo "Current codesigning identities:" >&2
-  echo "$IDENTITIES_OUTPUT" >&2
-  echo >&2
-  echo "Fix:" >&2
-  echo "  1) Install a Developer ID Application certificate (with private key) in your login keychain." >&2
-  echo "  2) Verify with: security find-identity -v -p codesigning" >&2
-  exit 1
+source "$ROOT_DIR/scripts/lib/developer-id.sh"
+# Existing overrides now accept only a complete fingerprint.
+if [[ "$DEVELOPER_ID_APP_CERT" != 'Developer ID Application' && -z "${DEVELOPER_ID_SHA1+x}" ]]; then
+  DEVELOPER_ID_SHA1="$DEVELOPER_ID_APP_CERT"
 fi
+select_developer_id "$TEAM_ID" || exit 2
+DEVELOPER_ID_APP_CERT="$DEVELOPER_ID_HASH"
 
 set +e
 NOTARY_CHECK_OUTPUT="$(xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" 2>&1 >/dev/null)"
@@ -127,6 +112,8 @@ if [[ ! -d "$APP_PATH" ]]; then
   echo "Exported app not found at: $APP_PATH" >&2
   exit 1
 fi
+
+verify_developer_id_signature "$APP_PATH"
 
 echo "[3/6] Creating ZIP artifact"
 ditto -c -k --keepParent "$APP_PATH" "$ZIP_PATH"

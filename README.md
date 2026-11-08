@@ -122,3 +122,32 @@ See [RELEASE.md](./RELEASE.md) for one-time Apple Developer setup and notarizati
 ## License
 
 MIT — see [LICENSE](./LICENSE).
+
+
+## Developer ID certificate renewal (November 2026)
+
+macOS releases now select the G2 certificate by its exact SHA-1 fingerprint,
+`D90FF6C655C831F11CC50642E4EF8675905EAF79` (team `CXVKS8ZNCD`, expires December 8, 2027).
+The old certificate may remain in the keychain; it is never a fallback for a new release.
+The selection policy is in `scripts/lib/developer-id.sh`.
+
+For a subsequent renewal, set `DEVELOPER_ID_SHA1` to the complete new fingerprint,
+install its matching private key and certificate, and update any Developer ID provisioning
+profiles to contain that certificate. The scripts reject missing, malformed, wrong-team,
+or wrong-type identities. Update the default fingerprint and expiry after verification.
+The legacy `Certificates.p12` backup predates G2; restore only a backup verified to contain
+the selected identity. Do not commit private keys or certificate backups.
+
+Run `bash scripts/test-developer-id.sh` for identity-selection and output-certificate checks.
+
+`DEVELOPER_ID_APP_CERT` can still override the certificate, but explicit values must now be full fingerprints. `DEVELOPER_ID_SHA1` takes precedence.
+
+The Xcode Release configuration also pins the same fingerprint in `project.yml`
+and the generated `ChezmoiSyncMonitor.xcodeproj`. On renewal, update both the
+helper default and `project.yml`, then run `xcodegen generate --spec project.yml`.
+Debug signing remains ad hoc. For a direct `xcodebuild archive`, override
+`CODE_SIGN_IDENTITY` with the full new SHA-1 and set the matching
+`DEVELOPMENT_TEAM`; use that same SHA-1 for `signingCertificate` in the export
+options plist. `DEVELOPER_ID_SHA1` is a release-script override, not an Xcode
+build setting. The release script writes these archive/export settings and
+verifies the exported app's leaf certificate automatically.

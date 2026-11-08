@@ -43,7 +43,7 @@ targets:
       configs:
         Release:
           CODE_SIGN_STYLE: Manual
-          CODE_SIGN_IDENTITY: "Developer ID Application"
+          CODE_SIGN_IDENTITY: "D90FF6C655C831F11CC50642E4EF8675905EAF79"
           SWIFT_OPTIMIZATION_LEVEL: -O
           STRIP_INSTALLED_PRODUCT: YES
           COPY_PHASE_STRIP: YES
